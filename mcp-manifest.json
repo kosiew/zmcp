@@ -1,0 +1,33 @@
+{
+  "name": "shell-executor",
+  "version": "1.0.0",
+  "description": "MCP server for safe shell command execution",
+  "author": "Your Name",
+  "license": "MIT",
+  "homepage": "https://github.com/yourusername/fastshell",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/yourusername/fastshell.git"
+  },
+  "main": "src/mcp_server.py",
+  "capabilities": {
+    "tools": {
+      "execute_command": {
+        "description": "Execute shell commands safely with whitelist filtering",
+        "allowedCommands": [
+          "ls", "cat", "head", "tail", "find", "tree", "wc", "du", "df",
+          "grep", "sed", "awk", "sort", "uniq", "cut", "tr",
+          "git", "npm", "yarn", "pip", "python", "node", "cargo", "make",
+          "ps", "uptime", "whoami", "id", "uname", "which",
+          "curl", "wget", "ping", "dig",
+          "tar", "zip", "unzip", "gzip",
+          "echo", "date", "cal", "pwd", "file", "stat"
+        ]
+      }
+    }
+  },
+  "transport": {
+    "type": "stdio"
+  },
+  "schema": "https://schemas.modelcontextprotocol.org/server-manifest/v1.0.0"
+}

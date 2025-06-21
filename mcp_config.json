@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "shell-executor": {
+      "command": "python",
+      "args": ["/Users/kosiew/GitHub/fastshell/src/mcp_server.py"],
+      "env": {
+        "MCP_API_TOKEN": "MYSECRET"
+      }
+    }
+  }
+}
