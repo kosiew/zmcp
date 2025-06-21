@@ -14,6 +14,13 @@ from mcp.server import NotificationOptions, Server
 from mcp.server.models import InitializationOptions
 import mcp.server.stdio
 
+# Import Rust helpers for streamlining imports
+from .rust_import_helpers import (
+    parse_import_statements, 
+    group_imports_by_base_path,
+    generate_import_statements
+)
+
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("shell-executor-mcp")
@@ -275,6 +282,20 @@ async def handle_list_tools() -> List[types.Tool]:
                 },
                 "required": ["code"]
             }
+        ),
+        types.Tool(
+            name="streamline_rust_imports",
+            description="Streamline Rust import statements by consolidating imports with the same base path",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "code": {
+                        "type": "string",
+                        "description": "The Rust code with import statements to streamline"
+                    }
+                },
+                "required": ["code"]
+            }
         )
     ]
 
@@ -301,6 +322,8 @@ async def handle_call_tool(
         return await simplify_code(arguments)
     elif name == "analyze_code":
         return await analyze_code(arguments)
+    elif name == "streamline_rust_imports":
+        return await streamline_rust_imports(arguments)
     else:
         raise ValueError(f"Unknown tool: {name}")
 
@@ -628,6 +651,45 @@ async def analyze_code(args: Dict[str, Any]) -> List[types.TextContent | types.I
     result_text += "\n".join(analysis_results)
     
     return [types.TextContent(type="text", text=result_text)]
+
+
+async def streamline_rust_imports(args: Dict[str, Any]) -> List[types.TextContent | types.ImageContent | types.EmbeddedResource]:
+    """Streamline Rust import statements by consolidating imports with the same base path"""
+    code = args.get("code", "")
+    
+    if not code or code.isspace():
+        return [types.TextContent(type="text", text="Error: No code provided")]
+    
+    try:
+        # Split the text into lines
+        lines = code.strip().split("\n")
+        
+        # Parse the import statements
+        use_statements, other_lines = parse_import_statements(lines)
+        
+        # Group imports by base path
+        grouped_by_base, special_imports = group_imports_by_base_path(use_statements)
+        
+        # Generate the consolidated import statements
+        result = generate_import_statements(grouped_by_base, special_imports)
+        
+        # Combine with other non-import lines
+        if other_lines and result:
+            streamlined_code = "\n".join(other_lines + [""] + result)
+        else:
+            streamlined_code = "\n".join(other_lines + result)
+        
+        return [types.TextContent(
+            type="text",
+            text=f"**Streamlined Rust Code:**\n```rust\n{streamlined_code}\n```\n\n**Original Code:**\n```rust\n{code}\n```"
+        )]
+        
+    except Exception as e:
+        logger.error(f"Error streamlining Rust imports: {str(e)}")
+        return [types.TextContent(
+            type="text",
+            text=f"Error streamlining Rust imports: {str(e)}\n\nOriginal code returned unchanged:\n```rust\n{code}\n```"
+        )]
 
 
 async def main():
