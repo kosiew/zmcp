@@ -15,7 +15,7 @@ from mcp.server.models import InitializationOptions
 import mcp.server.stdio
 
 # Import Rust helpers for streamlining imports
-from .rust_import_helpers import (
+from rust_import_helpers import (
     parse_import_statements, 
     group_imports_by_base_path,
     generate_import_statements
