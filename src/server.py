@@ -5,10 +5,8 @@ Uses the official MCP library for proper protocol implementation.
 """
 
 import asyncio
-import json
 import logging
 import subprocess
-import sys
 from typing import Any, Dict, List, Optional, Sequence
 
 import mcp.types as types
