@@ -7,8 +7,6 @@ A Model Context Protocol server that allows safe execution of whitelisted shell 
 import asyncio
 import json
 import logging
-import os
-import shlex
 import subprocess
 import sys
 from typing import Any, Dict, List, Optional
