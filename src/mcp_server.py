@@ -158,6 +158,15 @@ class MCPServer:
                     },
                     "required": ["command"]
                 }
+            },
+            {
+                "name": "get_joke",
+                "description": "Get a joke",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {},
+                    "required": []
+                }
             }
         ]
         return {"tools": tools}
@@ -169,6 +178,8 @@ class MCPServer:
         
         if tool_name == "execute_command":
             return await self.execute_command(arguments)
+        elif tool_name == "get_joke":
+            return await self.get_joke(arguments)
         else:
             raise ValueError(f"Unknown tool: {tool_name}")
     
@@ -244,6 +255,7 @@ class MCPServer:
                 "isError": True
             }
         except Exception as e:
+            logger.error(f"Error executing command: {str(e)}")
             return {
                 "content": [
                     {
@@ -253,6 +265,18 @@ class MCPServer:
                 ],
                 "isError": True
             }
+    
+    async def get_joke(self, args: Dict[str, Any]) -> Dict[str, Any]:
+        """Get a joke"""
+        return {
+            "content": [
+                {
+                    "type": "text",
+                    "text": "haha"
+                }
+            ],
+            "isError": False
+        }
     
     async def handle_request(self, request: Dict[str, Any]) -> Dict[str, Any]:
         """Handle incoming JSON-RPC request"""
