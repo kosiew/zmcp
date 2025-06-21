@@ -5,7 +5,7 @@ description = "mcp for ruunning shell commands in FastAPI"
 readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [
-    "fastapi>=0.115.13",
- "uvicorn>=0.34.3",
- "websockets>=15.0.1",
+    "asyncio>=3.4.3",
+    "mcp>=1.9.4",
+    "websockets>=15.0.1",
 ]
