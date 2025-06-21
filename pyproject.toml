@@ -1,0 +1,7 @@
+[project]
+name = "fastshell"
+version = "0.1.0"
+description = "mcp for ruunning shell commands in FastAPI"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = ["fastapi>=0.115.13", "uvicorn>=0.34.3"]
