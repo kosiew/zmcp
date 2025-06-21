@@ -18,7 +18,7 @@ classifiers = [
 ]
 
 [project.scripts]
-shell-executor-mcp = "src.mcp_server:main"
+shell-executor-mcp = "src.server:main"
 
 [project.urls]
 Homepage = "https://github.com/yourusername/shell-executor-mcp"
