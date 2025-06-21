@@ -166,6 +166,21 @@ class MCPServer:
                     "properties": {},
                     "required": []
                 }
+            },
+            {
+                "name": "get_prompts",
+                "description": "Get useful prompts for VSCode development and code improvement",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "category": {
+                            "type": "string",
+                            "description": "Category of prompts to return (all, refactoring, commenting, simplifying)",
+                            "default": "all"
+                        }
+                    },
+                    "required": []
+                }
             }
         ]
         return {"tools": tools}
@@ -179,6 +194,8 @@ class MCPServer:
             return await self.execute_command(arguments)
         elif tool_name == "get_joke":
             return await self.get_joke(arguments)
+        elif tool_name == "get_prompts":
+            return await self.get_prompts(arguments)
         else:
             raise ValueError(f"Unknown tool: {tool_name}")
     
@@ -272,6 +289,61 @@ class MCPServer:
                 {
                     "type": "text",
                     "text": "haha"
+                }
+            ],
+            "isError": False
+        }
+    
+    async def get_prompts(self, args: Dict[str, Any]) -> Dict[str, Any]:
+        """Get useful VSCode prompts for development"""
+        category = args.get("category", "all").lower()
+        
+        prompts = {
+            "refactoring": [
+                "Extract this code into a helper function with an appropriate name and parameters",
+                "Refactor this code to reduce duplication and improve maintainability",
+                "Break down this large function into smaller, more focused functions",
+                "Extract common patterns into reusable utility functions",
+                "Simplify this complex conditional logic by extracting helper methods",
+                "Convert this code to use a more appropriate design pattern",
+                "Refactor this code to improve separation of concerns"
+            ],
+            "commenting": [
+                "Add comprehensive docstrings to this code explaining purpose, parameters, and return values",
+                "Add inline comments explaining the complex logic in this code",
+                "Add JSDoc/TypeScript comments for better IDE support and documentation",
+                "Add comments explaining the business logic and why certain decisions were made",
+                "Document the edge cases and assumptions in this code",
+                "Add examples in the comments showing how to use this function",
+                "Explain the algorithm or approach used in this code with comments"
+            ],
+            "simplifying": [
+                "Simplify this code while maintaining the same functionality",
+                "Remove unnecessary complexity and make this code more readable",
+                "Replace this verbose code with a more concise equivalent",
+                "Use modern language features to simplify this code",
+                "Eliminate redundant variables and intermediate steps where possible",
+                "Convert this imperative code to a more functional style",
+                "Simplify these nested conditions using early returns or guard clauses"
+            ]
+        }
+        
+        if category == "all":
+            result_prompts = []
+            for cat, cat_prompts in prompts.items():
+                result_prompts.append(f"\n## {cat.title()} Prompts:")
+                result_prompts.extend([f"- {prompt}" for prompt in cat_prompts])
+            text = "\n".join(result_prompts)
+        elif category in prompts:
+            text = f"## {category.title()} Prompts\n" + "\n".join([f"- {prompt}" for prompt in prompts[category]])
+        else:
+            text = f"Unknown category '{category}'. Available categories: all, refactoring, commenting, simplifying"
+        
+        return {
+            "content": [
+                {
+                    "type": "text",
+                    "text": text
                 }
             ],
             "isError": False
