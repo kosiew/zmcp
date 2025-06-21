@@ -194,7 +194,7 @@ async def handle_list_tools() -> List[types.Tool]:
                     },
                     "language": {
                         "type": "string",
-                        "description": "Programming language (e.g., python, javascript, typescript, etc.)",
+                        "description": "Programming language (e.g., rust, python, javascript, typescript, etc.)",
                         "default": "auto-detect"
                     },
                     "refactor_type": {
@@ -242,7 +242,7 @@ async def handle_list_tools() -> List[types.Tool]:
                     },
                     "language": {
                         "type": "string",
-                        "description": "Programming language (e.g., python, javascript, typescript, etc.)",
+                        "description": "Programming language (e.g., rust, python, javascript, typescript, etc.)",
                         "default": "auto-detect"
                     },
                     "simplify_approach": {
@@ -266,7 +266,7 @@ async def handle_list_tools() -> List[types.Tool]:
                     },
                     "language": {
                         "type": "string",
-                        "description": "Programming language (e.g., python, javascript, typescript, etc.)",
+                        "description": "Programming language (e.g., rust, python, javascript, typescript, etc.)",
                         "default": "auto-detect"
                     },
                     "analysis_focus": {
