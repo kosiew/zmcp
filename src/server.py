@@ -21,6 +21,12 @@ from rust_import_helpers import (
     generate_import_statements
 )
 
+# Import Python helpers for streamlining imports
+from python_import_helpers import (
+    parse_python_import_statements, 
+    generate_python_import_statements
+)
+
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("shell-executor-mcp")
@@ -296,6 +302,20 @@ async def handle_list_tools() -> List[types.Tool]:
                 },
                 "required": ["code"]
             }
+        ),
+        types.Tool(
+            name="streamline_python_imports",
+            description="Streamline Python import statements by consolidating imports from the same module",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "code": {
+                        "type": "string",
+                        "description": "The Python code with import statements to streamline"
+                    }
+                },
+                "required": ["code"]
+            }
         )
     ]
 
@@ -324,6 +344,8 @@ async def handle_call_tool(
         return await analyze_code(arguments)
     elif name == "streamline_rust_imports":
         return await streamline_rust_imports(arguments)
+    elif name == "streamline_python_imports":
+        return await streamline_python_imports(arguments)
     else:
         raise ValueError(f"Unknown tool: {name}")
 
@@ -689,6 +711,39 @@ async def streamline_rust_imports(args: Dict[str, Any]) -> List[types.TextConten
         return [types.TextContent(
             type="text",
             text=f"Error streamlining Rust imports: {str(e)}\n\nOriginal code returned unchanged:\n```rust\n{code}\n```"
+        )]
+
+
+async def streamline_python_imports(args: Dict[str, Any]) -> List[types.TextContent | types.ImageContent | types.EmbeddedResource]:
+    """Streamline Python import statements by consolidating imports from the same module"""
+    code = args.get("code", "")
+    
+    if not code or code.isspace():
+        return [types.TextContent(type="text", text="Error: No code provided")]
+    
+    try:
+        # Split the text into lines
+        lines = code.strip().split("\n")
+        
+        # Parse the import statements
+        simple_imports, from_imports = parse_python_import_statements(lines)
+        
+        # Generate the consolidated import statements
+        result = generate_python_import_statements(simple_imports, from_imports)
+        
+        # Join the result back into a string
+        streamlined_code = "\n".join(result)
+        
+        return [types.TextContent(
+            type="text",
+            text=f"**Streamlined Python Code:**\n```python\n{streamlined_code}\n```\n\n**Original Code:**\n```python\n{code}\n```"
+        )]
+        
+    except Exception as e:
+        logger.error(f"Error streamlining Python imports: {str(e)}")
+        return [types.TextContent(
+            type="text",
+            text=f"Error streamlining Python imports: {str(e)}\n\nOriginal code returned unchanged:\n```python\n{code}\n```"
         )]
 
 
