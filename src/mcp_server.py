@@ -21,7 +21,6 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # Configuration
-API_TOKEN = os.getenv('MCP_API_TOKEN', 'MYSECRET')
 ALLOWED_COMMANDS = {
     # File system operations
     'ls': None,
