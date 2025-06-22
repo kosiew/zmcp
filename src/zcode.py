@@ -52,6 +52,129 @@ class LanguageType(Enum):
 server = Server(MCP_NAME)
 
 
+def validate_code_input(code: str, min_lines: int = 1) -> tuple[bool, str]:
+    """
+    Validate code input and return validation status with helpful message.
+    
+    Args:
+        code: The code string to validate
+        min_lines: Minimum number of non-empty lines required
+        
+    Returns:
+        Tuple of (is_valid, message)
+    """
+    if not code:
+        return False, "No code provided"
+    
+    if code.isspace():
+        return False, "Code appears to be empty (only whitespace)"
+    
+    # Check for minimum meaningful content
+    non_empty_lines = [line.strip() for line in code.split('\n') if line.strip()]
+    
+    if len(non_empty_lines) < min_lines:
+        return False, f"Code appears too short (found {len(non_empty_lines)} non-empty lines, need at least {min_lines})"
+    
+    # Check if it looks like actual code (has some programming constructs)
+    code_indicators = [
+        'def ', 'function ', 'class ', 'if ', 'for ', 'while ', 'import ', 'use ',
+        '{', '}', '(', ')', ';', '=', '==', '!=', '<', '>', '&&', '||', 'fn ',
+        'let ', 'const ', 'var ', 'return', 'struct', 'impl', 'trait'
+    ]
+    
+    if not any(indicator in code.lower() for indicator in code_indicators):
+        return False, "Input doesn't appear to contain code. Please provide actual source code for analysis."
+    
+    return True, ""
+
+
+def create_elicitation_message(tool_name: str, issue: str, suggestions: List[str]) -> str:
+    """
+    Create a helpful elicitation message when user input is insufficient.
+    
+    Args:
+        tool_name: Name of the tool being called
+        issue: Description of what's missing or problematic
+        suggestions: List of suggestions for what the user should provide
+        
+    Returns:
+        Formatted elicitation message
+    """
+    message = f"## Input Needed for {tool_name.replace('_', ' ').title()}\n\n"
+    message += f"**Issue:** {issue}\n\n"
+    message += "**Please provide:**\n"
+    
+    for i, suggestion in enumerate(suggestions, 1):
+        message += f"{i}. {suggestion}\n"
+    
+    message += "\n**Example:**\n"
+    
+    # Add tool-specific examples
+    if "code" in tool_name.lower():
+        message += "```python\n"
+        message += "def calculate_total(items):\n"
+        message += "    total = 0\n"
+        message += "    for item in items:\n"
+        message += "        total += item.price\n"
+        message += "    return total\n"
+        message += "```\n"
+    
+    message += "\nOnce you provide the necessary information, I can help you with your request!"
+    return message
+
+
+def detect_code_complexity(code: str) -> Dict[str, Any]:
+    """
+    Analyze code to detect complexity and provide context for better suggestions.
+    
+    Args:
+        code: The code string to analyze
+        
+    Returns:
+        Dictionary with complexity metrics and characteristics
+    """
+    lines = code.split('\n')
+    non_empty_lines = [line.strip() for line in lines if line.strip()]
+    
+    # Count various complexity indicators
+    nesting_level = 0
+    max_nesting = 0
+    function_count = 0
+    class_count = 0
+    loop_count = 0
+    conditional_count = 0
+    
+    for line in non_empty_lines:
+        line_lower = line.lower().strip()
+        
+        # Track nesting level
+        if any(keyword in line_lower for keyword in ['if ', 'for ', 'while ', 'def ', 'class ', 'function ']):
+            nesting_level += 1
+            max_nesting = max(max_nesting, nesting_level)
+        
+        # Count constructs
+        if line_lower.startswith(('def ', 'function ')):
+            function_count += 1
+        elif line_lower.startswith('class '):
+            class_count += 1
+        elif any(keyword in line_lower for keyword in ['for ', 'while ']):
+            loop_count += 1
+        elif line_lower.startswith('if '):
+            conditional_count += 1
+    
+    return {
+        'total_lines': len(lines),
+        'non_empty_lines': len(non_empty_lines),
+        'max_nesting_level': max_nesting,
+        'function_count': function_count,
+        'class_count': class_count,
+        'loop_count': loop_count,
+        'conditional_count': conditional_count,
+        'is_complex': max_nesting > 3 or len(non_empty_lines) > 50,
+        'is_simple': max_nesting <= 2 and len(non_empty_lines) <= 20
+    }
+
+
 def detect_language(code: str, language_hint: str = "auto-detect") -> LanguageType:
     """Detect programming language from code content"""
     if language_hint != "auto-detect":
@@ -60,27 +183,33 @@ def detect_language(code: str, language_hint: str = "auto-detect") -> LanguageTy
         for lang in LanguageType:
             if lang.value == hint_lower:
                 return lang
-        return LanguageType.UNKNOWN
+        # If hint doesn't match, continue with auto-detection but log the issue
+        logger.warning(f"Language hint '{language_hint}' not recognized, falling back to auto-detection")
     
     # Simple language detection based on common patterns
     code_lower = code.lower()
     
-    if "def " in code or "import " in code or "class " in code:
+    # More comprehensive detection patterns
+    if any(pattern in code for pattern in ["def ", "import ", "class ", "__init__", "self.", "elif ", "None", "True", "False"]):
         return LanguageType.PYTHON
-    elif "function " in code or "const " in code or "let " in code or "var " in code:
+    elif any(pattern in code for pattern in ["function ", "const ", "let ", "var ", "=>", "console.", "require(", "module.exports"]):
         return LanguageType.JAVASCRIPT
-    elif "interface " in code or "type " in code and "=>" in code:
+    elif any(pattern in code for pattern in ["interface ", "type ", ": string", ": number", ": boolean", "export ", "import {"]):
         return LanguageType.TYPESCRIPT
-    elif "#include" in code or "int main" in code:
+    elif any(pattern in code for pattern in ["#include", "int main", "printf(", "malloc(", "free(", "struct"]):
         return LanguageType.C
-    elif "public class" in code or "private " in code or "public " in code:
+    elif any(pattern in code for pattern in ["public class", "private ", "public ", "static ", "void ", "System.out"]):
         return LanguageType.JAVA
-    elif "fn " in code or "let mut" in code:
+    elif any(pattern in code for pattern in ["fn ", "let mut", "impl ", "trait ", "struct ", "use ", "match "]):
         return LanguageType.RUST
-    elif "func " in code or "package " in code:
+    elif any(pattern in code for pattern in ["func ", "package ", "import ", ":= ", "go ", "defer "]):
         return LanguageType.GO
     else:
         return LanguageType.UNKNOWN
+
+
+# Create the server instance
+server = Server(MCP_NAME)
 
 
 @server.list_tools()
@@ -242,14 +371,42 @@ async def refactor_code(args: Dict[str, Any]) -> List[types.TextContent | types.
     language = detect_language(code, args.get("language", "auto-detect"))
     refactor_type = args.get("refactor_type", "general")
     
-    if not code.strip():
-        return [types.TextContent(type="text", text="Error: No code provided")]
+    # Validate input and provide elicitation if needed
+    is_valid, validation_message = validate_code_input(code, min_lines=3)
+    if not is_valid:
+        suggestions = [
+            "Actual source code that you want to refactor (at least a few lines)",
+            "Specify the programming language if auto-detection might be unclear",
+            "Indicate the type of refactoring you want (extract_function, reduce_duplication, simplify_conditionals, improve_naming, or general)",
+            "Include the specific areas you're concerned about or want to improve"
+        ]
+        elicitation_text = create_elicitation_message("refactor_code", validation_message, suggestions)
+        return [types.TextContent(type="text", text=elicitation_text)]
     
-    # Generate refactoring suggestions based on type
+    # Analyze code complexity for better suggestions
+    complexity = detect_code_complexity(code)
+    
+    # Generate refactoring suggestions based on type and complexity
     suggestions = []
+    
+    # Add complexity-based insights
+    if complexity['is_complex']:
+        suggestions.append("## Complexity Analysis")
+        suggestions.append(f"- This code appears complex ({complexity['non_empty_lines']} lines, max nesting level {complexity['max_nesting_level']})")
+        suggestions.append("- Consider breaking it down into smaller functions")
+        if complexity['function_count'] == 0:
+            suggestions.append("- No functions detected - consider extracting logic into functions")
+    elif complexity['is_simple']:
+        suggestions.append("## Complexity Analysis")
+        suggestions.append(f"- This is relatively simple code ({complexity['non_empty_lines']} lines)")
+        suggestions.append("- Focus on readability and naming improvements")
     
     if refactor_type == "extract_function" or refactor_type == "general":
         suggestions.append("## Extract Function Opportunities")
+        if complexity['function_count'] == 0:
+            suggestions.append("- **Priority**: No functions detected - extract main logic into named functions")
+        if complexity['loop_count'] > 0:
+            suggestions.append(f"- Found {complexity['loop_count']} loop(s) - consider extracting complex loop bodies")
         suggestions.append("- Look for repeated code blocks that can be extracted into helper functions")
         suggestions.append("- Consider extracting complex conditional logic into named functions")
         suggestions.append("- Extract magic numbers and strings into named constants")
@@ -285,7 +442,18 @@ async def refactor_code(args: Dict[str, Any]) -> List[types.TextContent | types.
         suggestions.append("- Use async/await instead of Promise chains")
     
     result_text = f"## Refactoring Analysis for {language.value.title()} Code\n\n"
+    
+    # Add language guidance if needed
+    language_guide = get_language_guidance(language, code)
+    if language_guide:
+        result_text += language_guide
+    
     result_text += f"**Original Code:**\n```{language.value}\n{code}\n```\n\n"
+    result_text += f"**Complexity Analysis:**\n"
+    result_text += f"- Lines of code: {complexity['non_empty_lines']}\n"
+    result_text += f"- Functions: {complexity['function_count']}\n"
+    result_text += f"- Maximum nesting: {complexity['max_nesting_level']}\n"
+    result_text += f"- Complexity level: {'High' if complexity['is_complex'] else 'Low' if complexity['is_simple'] else 'Medium'}\n\n"
     result_text += "**Refactoring Suggestions:**\n"
     result_text += "\n".join(suggestions)
     
@@ -298,19 +466,44 @@ async def add_comments(args: Dict[str, Any]) -> List[types.TextContent | types.I
     language = detect_language(code, args.get("language", "auto-detect"))
     comment_style = args.get("comment_style", "comprehensive")
     
-    if not code.strip():
-        return [types.TextContent(type="text", text="Error: No code provided")]
+    # Validate input and provide elicitation if needed
+    is_valid, validation_message = validate_code_input(code, min_lines=2)
+    if not is_valid:
+        suggestions = [
+            "Source code that needs commenting (functions, classes, or complex logic)",
+            "Specify the programming language if it's not clear from the code",
+            "Choose comment style: 'docstring' for function docs, 'inline' for line comments, 'jsdoc' for JavaScript docs, or 'comprehensive' for all types",
+            "Indicate specific areas that need explanation (algorithms, business logic, etc.)"
+        ]
+        elicitation_text = create_elicitation_message("add_comments", validation_message, suggestions)
+        return [types.TextContent(type="text", text=elicitation_text)]
     
-    # Generate commenting suggestions
+    # Analyze code structure for targeted commenting suggestions
+    complexity = detect_code_complexity(code)
+    
+    # Generate commenting suggestions based on code structure
     suggestions = []
     
+    # Add structure-based insights
+    suggestions.append("## Code Structure Analysis")
+    if complexity['function_count'] > 0:
+        suggestions.append(f"- Found {complexity['function_count']} function(s) - prioritize function documentation")
+    if complexity['class_count'] > 0:
+        suggestions.append(f"- Found {complexity['class_count']} class(es) - add class-level documentation")
+    if complexity['is_complex']:
+        suggestions.append(f"- Complex code detected - inline comments will be especially helpful")
+    
     if comment_style == "docstring" or comment_style == "comprehensive":
-        suggestions.append("## Function/Method Documentation")
+        suggestions.append("\n## Function/Method Documentation")
         if language == LanguageType.PYTHON:
             suggestions.append('- Add docstrings using """triple quotes"""')
             suggestions.append("- Include Args:, Returns:, and Raises: sections")
+            if complexity['function_count'] > 0:
+                suggestions.append("- **Priority**: Document function parameters and return values")
         elif language in [LanguageType.JAVASCRIPT, LanguageType.TYPESCRIPT]:
             suggestions.append("- Add JSDoc comments with @param, @returns, @throws")
+            if complexity['function_count'] > 0:
+                suggestions.append("- **Priority**: Document function signatures for better IDE support")
         else:
             suggestions.append("- Add function-level documentation explaining purpose")
     
@@ -339,6 +532,12 @@ async def add_comments(args: Dict[str, Any]) -> List[types.TextContent | types.I
     }
     
     result_text = f"## Comment Enhancement for {language.value.title()} Code\n\n"
+    
+    # Add language guidance if needed
+    language_guide = get_language_guidance(language, code)
+    if language_guide:
+        result_text += language_guide
+    
     result_text += f"**Original Code:**\n```{language.value}\n{code}\n```\n\n"
     result_text += "**Commenting Guidelines:**\n"
     result_text += "\n".join(suggestions)
@@ -355,14 +554,36 @@ async def simplify_code(args: Dict[str, Any]) -> List[types.TextContent | types.
     language = detect_language(code, args.get("language", "auto-detect"))
     approach = args.get("simplify_approach", "comprehensive")
     
-    if not code.strip():
-        return [types.TextContent(type="text", text="Error: No code provided")]
+    # Validate input and provide elicitation if needed
+    is_valid, validation_message = validate_code_input(code, min_lines=3)
+    if not is_valid:
+        suggestions = [
+            "Code that appears complex or verbose and could be simplified",
+            "Specify the programming language if auto-detection might fail",
+            "Choose simplification approach: 'reduce_nesting', 'use_modern_features', 'eliminate_redundancy', or 'comprehensive'",
+            "Mention specific issues: nested conditions, repeated code, verbose expressions, etc."
+        ]
+        elicitation_text = create_elicitation_message("simplify_code", validation_message, suggestions)
+        return [types.TextContent(type="text", text=elicitation_text)]
+    
+    # Analyze code complexity for targeted simplification
+    complexity = detect_code_complexity(code)
     
     suggestions = []
     
+    # Add complexity-specific simplification advice
+    suggestions.append("## Simplification Opportunities")
+    if complexity['max_nesting_level'] > 3:
+        suggestions.append(f"- **High Priority**: Deep nesting detected (level {complexity['max_nesting_level']}) - use early returns and guard clauses")
+    if complexity['conditional_count'] > 3:
+        suggestions.append(f"- Multiple conditionals found ({complexity['conditional_count']}) - consider using lookup tables or strategy pattern")
+    if complexity['loop_count'] > 2:
+        suggestions.append(f"- Multiple loops detected ({complexity['loop_count']}) - look for opportunities to combine or use built-in functions")
+    
     if approach == "reduce_nesting" or approach == "comprehensive":
-        suggestions.append("## Reduce Nesting")
-        suggestions.append("- Use early returns to eliminate else blocks")
+        suggestions.append("\n## Reduce Nesting")
+        if complexity['max_nesting_level'] > 2:
+            suggestions.append("- **Priority**: Use early returns to eliminate else blocks")
         suggestions.append("- Extract nested logic into separate functions")
         suggestions.append("- Use guard clauses for validation")
     
@@ -391,7 +612,17 @@ async def simplify_code(args: Dict[str, Any]) -> List[types.TextContent | types.
     suggestions.append("- Remove dead code and unused variables")
     
     result_text = f"## Code Simplification for {language.value.title()}\n\n"
+    
+    # Add language guidance if needed
+    language_guide = get_language_guidance(language, code)
+    if language_guide:
+        result_text += language_guide
+    
     result_text += f"**Original Code:**\n```{language.value}\n{code}\n```\n\n"
+    result_text += f"**Complexity Metrics:**\n"
+    result_text += f"- Nesting level: {complexity['max_nesting_level']}\n"
+    result_text += f"- Conditionals: {complexity['conditional_count']}\n"
+    result_text += f"- Loops: {complexity['loop_count']}\n\n"
     result_text += "**Simplification Suggestions:**\n"
     result_text += "\n".join(suggestions)
     
@@ -404,19 +635,43 @@ async def analyze_code(args: Dict[str, Any]) -> List[types.TextContent | types.I
     language = detect_language(code, args.get("language", "auto-detect"))
     focus = args.get("analysis_focus", "all")
     
-    if not code.strip():
-        return [types.TextContent(type="text", text="Error: No code provided")]
+    # Validate input and provide elicitation if needed
+    is_valid, validation_message = validate_code_input(code, min_lines=2)
+    if not is_valid:
+        suggestions = [
+            "Source code for analysis (functions, classes, algorithms, etc.)",
+            "Specify the programming language if it's ambiguous",
+            "Choose analysis focus: 'performance', 'readability', 'maintainability', 'security', or 'all'",
+            "Mention specific concerns: slow execution, hard to understand, difficult to modify, security vulnerabilities, etc."
+        ]
+        elicitation_text = create_elicitation_message("analyze_code", validation_message, suggestions)
+        return [types.TextContent(type="text", text=elicitation_text)]
+    
+    # Perform detailed code analysis
+    complexity = detect_code_complexity(code)
     
     analysis_results = []
     
-    # Code metrics
+    # Enhanced code metrics with insights
     lines = code.split('\n')
     non_empty_lines = [line for line in lines if line.strip()]
     
-    analysis_results.append(f"## Code Analysis for {language.value.title()}")
+    analysis_results.append(f"## Comprehensive Code Analysis for {language.value.title()}")
     analysis_results.append(f"- **Total lines:** {len(lines)}")
     analysis_results.append(f"- **Non-empty lines:** {len(non_empty_lines)}")
     analysis_results.append(f"- **Language detected:** {language.value}")
+    analysis_results.append(f"- **Functions found:** {complexity['function_count']}")
+    analysis_results.append(f"- **Classes found:** {complexity['class_count']}")
+    analysis_results.append(f"- **Maximum nesting level:** {complexity['max_nesting_level']}")
+    analysis_results.append(f"- **Complexity assessment:** {'High' if complexity['is_complex'] else 'Low' if complexity['is_simple'] else 'Medium'}")
+    
+    # Add targeted recommendations based on code structure
+    if complexity['function_count'] == 0 and len(non_empty_lines) > 10:
+        analysis_results.append("\n## ⚠️ Structural Concerns")
+        analysis_results.append("- No functions detected in substantial code - consider breaking into functions")
+    if complexity['max_nesting_level'] > 4:
+        analysis_results.append("\n## ⚠️ Complexity Warning")
+        analysis_results.append("- Very deep nesting detected - refactoring recommended")
     
     if focus == "performance" or focus == "all":
         analysis_results.append("\n## Performance Analysis")
@@ -447,9 +702,65 @@ async def analyze_code(args: Dict[str, Any]) -> List[types.TextContent | types.I
         analysis_results.append("- Sanitize user input to prevent injection attacks")
     
     result_text = f"**Code to Analyze:**\n```{language.value}\n{code}\n```\n\n"
+    
+    # Add language guidance if needed
+    language_guide = get_language_guidance(language, code)
+    if language_guide:
+        result_text += language_guide
+    
     result_text += "\n".join(analysis_results)
     
     return [types.TextContent(type="text", text=result_text)]
+
+
+def get_language_guidance(detected_language: LanguageType, code: str) -> str:
+    """
+    Provide guidance when language detection fails or when code seems ambiguous.
+    
+    Args:
+        detected_language: The language that was detected
+        code: The original code string
+        
+    Returns:
+        Helpful guidance message
+    """
+    if detected_language == LanguageType.UNKNOWN:
+        guidance = "\n## ⚠️ Language Detection Issue\n"
+        guidance += "The programming language could not be automatically detected. This might happen if:\n"
+        guidance += "- The code snippet is too short or doesn't contain language-specific keywords\n"
+        guidance += "- The code is pseudocode or incomplete\n"
+        guidance += "- It's a configuration file or data format rather than source code\n\n"
+        guidance += "**Please specify the language explicitly** using the 'language' parameter, or provide more complete code with language-specific constructs.\n\n"
+        guidance += "**Supported languages:** python, javascript, typescript, c, java, rust, go\n"
+        return guidance
+    
+    # Check if code might be in a different language than detected
+    if len(code.strip()) < 50:  # Very short code
+        guidance = f"\n## 💡 Language Detection Note\n"
+        guidance += f"Detected as {detected_language.value}, but the code is quite short. "
+        guidance += "If this is incorrect, please specify the language explicitly.\n"
+        return guidance
+    
+    return ""
+
+
+# Add this function to help with tool results formatting
+def format_tool_result(title: str, original_code: str, result_code: str, language: LanguageType, additional_info: str = "") -> str:
+    """Format tool results consistently with helpful information."""
+    formatted = f"## {title}\n\n"
+    
+    if additional_info:
+        formatted += f"{additional_info}\n\n"
+    
+    formatted += f"**Original Code:**\n```{language.value}\n{original_code}\n```\n\n"
+    formatted += f"**Result:**\n```{language.value}\n{result_code}\n```\n"
+    
+    # Add language guidance if needed
+    language_guide = get_language_guidance(language, original_code)
+    if language_guide:
+        formatted += language_guide
+    
+    return formatted
 
 
 async def streamline_rust_imports(args: Dict[str, Any]) -> List[types.TextContent | types.ImageContent | types.EmbeddedResource]:
@@ -457,7 +768,25 @@ async def streamline_rust_imports(args: Dict[str, Any]) -> List[types.TextConten
     code = args.get("code", "")
     
     if not code or code.isspace():
-        return [types.TextContent(type="text", text="Error: No code provided")]
+        suggestions = [
+            "Rust source code containing 'use' statements that need to be consolidated",
+            "Include the complete import section of your Rust file",
+            "Provide the actual imports, not just function definitions",
+            "Example: 'use std::collections::HashMap;' or 'use serde::{Serialize, Deserialize};'"
+        ]
+        elicitation_text = create_elicitation_message("streamline_rust_imports", "No Rust code provided", suggestions)
+        return [types.TextContent(type="text", text=elicitation_text)]
+    
+    # Check if the code contains Rust import statements
+    if "use " not in code:
+        suggestions = [
+            "Rust code with 'use' statements (import statements)",
+            "The code should contain lines starting with 'use'",
+            "If you want to organize other Rust code, try the 'refactor_code' tool instead",
+            "Example Rust imports: 'use std::fs::File;', 'use tokio::net::TcpListener;'"
+        ]
+        elicitation_text = create_elicitation_message("streamline_rust_imports", "No Rust import statements ('use' statements) found in the provided code", suggestions)
+        return [types.TextContent(type="text", text=elicitation_text)]
     
     try:
         # Split the text into lines
@@ -496,7 +825,25 @@ async def streamline_python_imports(args: Dict[str, Any]) -> List[types.TextCont
     code = args.get("code", "")
     
     if not code or code.isspace():
-        return [types.TextContent(type="text", text="Error: No code provided")]
+        suggestions = [
+            "Python source code containing import statements that need to be consolidated",
+            "Include the complete import section of your Python file",
+            "Provide the actual imports, not just function definitions",
+            "Example: 'import os' or 'from collections import defaultdict, Counter'"
+        ]
+        elicitation_text = create_elicitation_message("streamline_python_imports", "No Python code provided", suggestions)
+        return [types.TextContent(type="text", text=elicitation_text)]
+    
+    # Check if the code contains Python import statements
+    if not any(line.strip().startswith(('import ', 'from ')) for line in code.split('\n')):
+        suggestions = [
+            "Python code with import statements ('import' or 'from' statements)",
+            "The code should contain lines starting with 'import' or 'from'",
+            "If you want to organize other Python code, try the 'refactor_code' tool instead",
+            "Example Python imports: 'import sys', 'from typing import List, Dict'"
+        ]
+        elicitation_text = create_elicitation_message("streamline_python_imports", "No Python import statements found in the provided code", suggestions)
+        return [types.TextContent(type="text", text=elicitation_text)]
     
     try:
         # Split the text into lines
