@@ -14,12 +14,15 @@ from mcp.server import NotificationOptions, Server
 from mcp.server.models import InitializationOptions
 import mcp.server.stdio
 
+MCP_NAME = "shell-executor-mcp"
+MCP_VERSION = "0.1.0"
+
 # Configure logging
 logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger("shell-executor-mcp")
+logger = logging.getLogger(MCP_NAME)
 
 # Create the server instance
-server = Server("shell-executor-mcp")
+server = Server(MCP_NAME)
 
 
 class CommandWhitelist:
@@ -231,8 +234,8 @@ async def main():
             read_stream,
             write_stream,
             InitializationOptions(
-                server_name="shell-executor-mcp",
-                server_version="0.1.0",
+                server_name=MCP_NAME,
+                server_version=MCP_VERSION,
                 capabilities=server.get_capabilities(
                     notification_options=NotificationOptions(),
                     experimental_capabilities={}

@@ -27,9 +27,11 @@ from python_import_helpers import (
     generate_python_import_statements
 )
 
+MCP_NAME = "code-refactor-mcp"
+MCP_VERSION = "0.1.0"
 # Configure logging
 logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger("code-refactor-mcp")
+logger = logging.getLogger(MCP_NAME)
 
 
 class LanguageType(Enum):
@@ -45,7 +47,7 @@ class LanguageType(Enum):
 
 
 # Create the server instance
-server = Server("code-refactor-mcp")
+server = Server(MCP_NAME)
 
 
 def detect_language(code: str, language_hint: str = "auto-detect") -> LanguageType:
@@ -595,8 +597,8 @@ async def main():
             read_stream,
             write_stream,
             InitializationOptions(
-                server_name="code-refactor-mcp",
-                server_version="0.1.0",
+                server_name=MCP_NAME,
+                server_version=MCP_VERSION,
                 capabilities=server.get_capabilities(
                     notification_options=NotificationOptions(),
                     experimental_capabilities={}
