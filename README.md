@@ -251,3 +251,201 @@ python src/zcode.py
 3. Add input validation and error handling
 4. Update this README with the new tool documentation
 ````
+
+
+## Future commands to add for zcode
+
+```
+async def security_audit(args: Dict[str, Any]) -> List[types.TextContent]:
+    """Audit code for security vulnerabilities including SQL injection, XSS, hardcoded secrets"""
+    code = args.get("code", "")
+    language = detect_language(code, args.get("language", "auto-detect"))
+    audit_focus = args.get("audit_focus", "all")
+    
+    # Rust-specific: unsafe blocks, buffer overflows, memory safety
+    # Python-specific: pickle vulnerabilities, eval/exec usage, SQL injection
+    # Go-specific: race conditions, input validation, cryptographic issues
+```
+
+```
+async def dependency_vulnerabilities(args: Dict[str, Any]) -> List[types.TextContent]:
+    """Scan dependencies for known security vulnerabilities"""
+    dependencies = args.get("dependencies", "")
+    language = detect_language(dependencies, args.get("language", "auto-detect"))
+    
+    # Parse Cargo.toml, requirements.txt, go.mod
+    # Check against vulnerability databases (cargo audit, safety, govulncheck)
+```
+
+```
+async def performance_analyzer(args: Dict[str, Any]) -> List[types.TextContent]:
+    """Analyze code for performance bottlenecks and optimization opportunities"""
+    code = args.get("code", "")
+    language = detect_language(code, args.get("language", "auto-detect"))
+    focus = args.get("focus", "all")  # algorithms, memory, concurrency, io
+    
+    # Rust: zero-cost abstractions, allocation patterns, async performance
+    # Python: GIL issues, list comprehensions vs loops, generator usage
+    # Go: goroutine leaks, channel usage, garbage collection pressure
+```
+
+```
+async def memory_analyzer(args: Dict[str, Any]) -> List[types.TextContent]:
+    """Analyze code for memory usage patterns and potential leaks"""
+    code = args.get("code", "")
+    language = detect_language(code, args.get("language", "auto-detect"))
+    
+    # Rust: ownership patterns, unnecessary clones, Box usage
+    # Python: circular references, large object creation
+    # Go: pointer usage, slice/map growth patterns
+```
+
+```
+async def concurrency_analyzer(args: Dict[str, Any]) -> List[types.TextContent]:
+    """Analyze concurrent code for race conditions and performance issues"""
+    code = args.get("code", "")
+    language = detect_language(code, args.get("language", "auto-detect"))
+    
+    # Rust: thread safety, async/await patterns, Arc/Mutex usage
+    # Python: asyncio patterns, threading vs multiprocessing
+    # Go: goroutine patterns, channel usage, context handling
+```
+
+```
+async def rust_ownership_analyzer(args: Dict[str, Any]) -> List[types.TextContent]:
+    """Analyze Rust code for ownership, borrowing, and lifetime issues"""
+    code = args.get("code", "")
+    
+    # Detect unnecessary clones, lifetime issues, borrow checker problems
+    # Suggest better ownership patterns, zero-copy alternatives
+```
+
+```
+async def python_async_analyzer(args: Dict[str, Any]) -> List[types.TextContent]:
+    """Analyze Python async/await patterns and suggest improvements"""
+    code = args.get("code", "")
+    
+    # Detect blocking calls in async functions, improper exception handling
+    # Suggest proper async patterns, asyncio best practices
+```
+
+```
+async def go_error_analyzer(args: Dict[str, Any]) -> List[types.TextContent]:
+    """Analyze Go error handling patterns and suggest improvements"""
+    code = args.get("code", "")
+    
+    # Detect improper error handling, missing error checks
+    # Suggest error wrapping, custom error types
+```
+
+```
+async def rust_modernizer(args: Dict[str, Any]) -> List[types.TextContent]:
+    """Modernize Rust code to use latest idioms and features"""
+    code = args.get("code", "")
+    edition = args.get("edition", "2021")
+    
+    # Update to modern Rust patterns, suggest new std library features
+    # Convert to use const generics, async/await, pattern matching improvements
+```
+
+```
+async def python_type_annotator(args: Dict[str, Any]) -> List[types.TextContent]:
+    """Add type annotations to Python code for better static analysis"""
+    code = args.get("code", "")
+    strict_mode = args.get("strict_mode", False)
+    
+    # Add missing type hints, suggest generic types, Union types
+    # Use mypy-compatible annotations, dataclasses
+```
+
+```
+async def go_generics_converter(args: Dict[str, Any]) -> List[types.TextContent]:
+    """Convert Go code to use generics where appropriate (Go 1.18+)"""
+    code = args.get("code", "")
+    
+    # Convert interface{} to generics, type-safe collections
+    # Suggest generic functions and types
+```
+
+```
+async def rust_macro_analyzer(args: Dict[str, Any]) -> List[types.TextContent]:
+    """Analyze Rust macros and suggest improvements or alternatives"""
+    code = args.get("code", "")
+    
+    # Analyze macro complexity, suggest proc macros vs declarative
+    # Detect macro hygiene issues, performance implications
+```
+
+```
+async def python_import_optimizer(args: Dict[str, Any]) -> List[types.TextContent]:
+    """Optimize Python imports and suggest better organization"""
+    code = args.get("code", "")
+    
+    # Extend existing streamline_python_imports with more intelligence
+    # Suggest lazy imports, detect circular imports, optimize for startup time
+```
+
+```
+async def go_interface_extractor(args: Dict[str, Any]) -> List[types.TextContent]:
+    """Extract Go interfaces from concrete implementations"""
+    code = args.get("code", "")
+    minimal = args.get("minimal", True)
+    
+    # Extract minimal interfaces, suggest interface segregation
+    # Detect implicit interface satisfaction
+```
+
+```
+async def rust_trait_generator(args: Dict[str, Any]) -> List[types.TextContent]:
+    """Generate Rust traits and implementations from specifications"""
+    spec = args.get("specification", "")
+    derive_traits = args.get("derive_traits", ["Debug", "Clone"])
+    
+    # Generate trait definitions, default implementations
+    # Suggest appropriate derive traits, async traits
+```
+
+
+```
+async def python_dataclass_generator(args: Dict[str, Any]) -> List[types.TextContent]:
+    """Generate Python dataclasses from specifications or existing code"""
+    specification = args.get("specification", "")
+    frozen = args.get("frozen", False)
+    slots = args.get("slots", True)
+    
+    # Generate dataclasses with proper typing, validation
+    # Include __post_init__, property methods
+```
+
+```
+async def go_struct_generator(args: Dict[str, Any]) -> List[types.TextContent]:
+    """Generate Go structs with JSON tags and validation"""
+    specification = args.get("specification", "")
+    include_json_tags = args.get("include_json_tags", True)
+    
+    # Generate structs with appropriate tags, validation methods
+    # Include String() methods, comparison functions
+```
+
+```
+async def error_handling_analyzer(args: Dict[str, Any]) -> List[types.TextContent]:
+    """Analyze error handling patterns across languages"""
+    code = args.get("code", "")
+    language = detect_language(code, args.get("language", "auto-detect"))
+    
+    # Rust: Result<T, E> patterns, ? operator usage
+    # Python: exception handling, error context
+    # Go: error return patterns, error wrapping
+```
+
+```
+async def serialization_analyzer(args: Dict[str, Any]) -> List[types.TextContent]:
+    """Analyze serialization patterns and suggest improvements"""
+    code = args.get("code", "")
+    language = detect_language(code, args.get("language", "auto-detect"))
+    
+    # Rust: serde patterns, custom serializers
+    # Python: json, pickle, dataclasses serialization
+    # Go: json tags, custom marshalers
+```
+    
