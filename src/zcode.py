@@ -6,6 +6,7 @@ Uses the official MCP library for proper protocol implementation.
 
 import asyncio
 import logging
+import re
 from enum import Enum
 from typing import Any, Dict, List
 
@@ -299,6 +300,18 @@ async def handle_list_tools() -> List[types.Tool]:
             inputSchema=create_schema({
                 "code": code_property("The Python code with import statements to streamline")
             }, ["code"])
+        ),
+        types.Tool(
+            name="detect_code_patterns",
+            description="Detect design patterns and anti-patterns in code",
+            inputSchema=create_schema({
+                "code": code_property("The code content to analyze for patterns"),
+                "language": language_property(),
+                "pattern_focus": string_property(
+                    "Focus area: design_patterns, anti_patterns, code_smells, architecture_patterns, or all",
+                    "all"
+                )
+            }, ["code"])
         )
     ]
 
@@ -327,6 +340,8 @@ async def handle_call_tool(
         return await streamline_rust_imports(arguments)
     elif name == "streamline_python_imports":
         return await streamline_python_imports(arguments)
+    elif name == "detect_code_patterns":
+        return await detect_code_patterns(arguments)
     else:
         raise ValueError(f"Unknown tool: {name}")
 
@@ -1306,6 +1321,528 @@ async def streamline_python_imports(args: Dict[str, Any]) -> List[types.TextCont
             type="text",
             text=f"Error streamlining Python imports: {str(e)}\n\nOriginal code returned unchanged:\n```python\n{code}\n```"
         )]
+
+
+async def detect_code_patterns(args: Dict[str, Any]) -> List[types.TextContent | types.ImageContent | types.EmbeddedResource]:
+    """
+    Detects design patterns, anti-patterns, code smells, and architecture patterns in code.
+    
+    Args:
+        code: The code to analyze
+        language: Programming language (optional, auto-detected if not provided)
+        pattern_focus: Focus area - 'design_patterns', 'anti_patterns', 'code_smells', 'architecture', or 'all'
+        
+    Returns:
+        List containing analysis results
+    """
+    try:
+        code = args.get("code", "").strip()
+        language_str = args.get("language", "auto-detect").lower()
+        pattern_focus = args.get("pattern_focus", "all").lower()
+        
+        # Validate input
+        if not code:
+            return [types.TextContent(
+                type="text",
+                text="❌ **Error**: No code provided for analysis.\n\n**Usage**: Please provide the code you want to analyze for patterns.\n\n**Example**:\n```python\nclass DatabaseManager:\n    def __init__(self):\n        self.connection = None\n    \n    def get_connection(self):\n        if self.connection is None:\n            self.connection = Database.connect()\n        return self.connection\n```"
+            )]
+        
+        # Auto-detect language
+        language = detect_language(code, language_str)
+        
+        # Validate pattern focus
+        valid_focuses = ["design_patterns", "anti_patterns", "code_smells", "architecture", "all"]
+        if pattern_focus not in valid_focuses:
+            pattern_focus = "all"
+        
+        pattern_results = []
+        
+        # Initialize variables
+        design_patterns = []
+        anti_patterns = []
+        code_smells = []
+        arch_patterns = []
+        
+        # Detect design patterns
+        if pattern_focus in ["design_patterns", "all"]:
+            design_patterns = detect_design_patterns(code, language)
+            if design_patterns:
+                pattern_results.append("## 🎨 Design Patterns Detected")
+                for pattern in design_patterns:
+                    pattern_results.append(f"### {pattern['name']}")
+                    pattern_results.append(f"**Confidence:** {pattern['confidence']}")
+                    pattern_results.append(f"**Description:** {pattern['description']}")
+                    pattern_results.append(f"**Evidence:** {pattern['evidence']}")
+                    if pattern['benefits']:
+                        pattern_results.append(f"**Benefits:** {', '.join(pattern['benefits'])}")
+                    pattern_results.append("")
+        
+        # Detect anti-patterns
+        if pattern_focus in ["anti_patterns", "all"]:
+            anti_patterns = detect_anti_patterns(code, language)
+            if anti_patterns:
+                pattern_results.append("## ⚠️ Anti-Patterns Detected")
+                for pattern in anti_patterns:
+                    pattern_results.append(f"### {pattern['name']}")
+                    pattern_results.append(f"**Severity:** {pattern['severity']}")
+                    pattern_results.append(f"**Description:** {pattern['description']}")
+                    pattern_results.append(f"**Evidence:** {pattern['evidence']}")
+                    if pattern['impacts']:
+                        pattern_results.append(f"**Negative Impacts:** {', '.join(pattern['impacts'])}")
+                    if pattern['refactoring_suggestions']:
+                        pattern_results.append(f"**Refactoring Suggestions:** {', '.join(pattern['refactoring_suggestions'])}")
+                    pattern_results.append("")
+        
+        # Detect code smells
+        if pattern_focus in ["code_smells", "all"]:
+            code_smells = detect_code_smells(code, language)
+            if code_smells:
+                pattern_results.append("## 👃 Code Smells Detected")
+                for smell in code_smells:
+                    pattern_results.append(f"### {smell['name']}")
+                    pattern_results.append(f"**Type:** {smell['type']}")
+                    pattern_results.append(f"**Severity:** {smell['severity']}")
+                    pattern_results.append(f"**Description:** {smell['description']}")
+                    pattern_results.append(f"**Evidence:** {smell['evidence']}")
+                    if smell['refactoring_suggestions']:
+                        pattern_results.append(f"**Refactoring Suggestions:** {', '.join(smell['refactoring_suggestions'])}")
+                    pattern_results.append("")
+        
+        # Detect architecture patterns
+        if pattern_focus in ["architecture", "all"]:
+            arch_patterns = detect_architecture_patterns(code, language)
+            if arch_patterns:
+                pattern_results.append("## 🏗️ Architecture Patterns Detected")
+                for pattern in arch_patterns:
+                    pattern_results.append(f"### {pattern['name']}")
+                    pattern_results.append(f"**Type:** {pattern['type']}")
+                    pattern_results.append(f"**Confidence:** {pattern['confidence']}")
+                    pattern_results.append(f"**Description:** {pattern['description']}")
+                    pattern_results.append(f"**Evidence:** {pattern['evidence']}")
+                    if pattern['benefits']:
+                        pattern_results.append(f"**Benefits:** {', '.join(pattern['benefits'])}")
+                    pattern_results.append("")
+        
+        # Overall pattern assessment
+        if not any([design_patterns, anti_patterns, code_smells, arch_patterns]):
+            pattern_results.append("## ✅ Pattern Analysis Results")
+            pattern_results.append("No significant patterns, anti-patterns, or code smells detected in the provided code.")
+            pattern_results.append("This could indicate:")
+            pattern_results.append("- Clean, straightforward code")
+            pattern_results.append("- Simple functionality that doesn't require complex patterns")
+            pattern_results.append("- Code that follows good practices")
+        else:
+            # Generate overall recommendations
+            pattern_results.append("## 💡 Overall Recommendations")
+            recommendations = generate_pattern_recommendations(design_patterns, anti_patterns, code_smells, arch_patterns)
+            for rec in recommendations:
+                pattern_results.append(f"- {rec}")
+        
+        result_text = f"**Code Under Analysis:**\n```{language.value}\n{code}\n```\n\n"
+        
+        # Add pattern-specific guidance
+        pattern_guide = get_pattern_guidance(language, pattern_focus)
+        if pattern_guide:
+            result_text += pattern_guide
+        
+        result_text += "\n".join(pattern_results)
+        
+        return [types.TextContent(type="text", text=result_text)]
+        
+    except Exception as e:
+        logger.error(f"Error detecting code patterns: {str(e)}")
+        return [types.TextContent(
+            type="text",
+            text=f"Error detecting code patterns: {str(e)}\n\nPlease ensure you provide valid code for analysis."
+        )]
+
+
+def detect_design_patterns(code: str, language: LanguageType) -> List[Dict[str, Any]]:
+    """Detect design patterns in the code"""
+    patterns = []
+    
+    # Singleton Pattern
+    if re.search(r'class\s+\w+.*:\s*\n.*_instance\s*=\s*None', code, re.MULTILINE | re.DOTALL):
+        patterns.append({
+            'name': 'Singleton Pattern',
+            'confidence': 'High',
+            'description': 'Ensures a class has only one instance and provides global access to it',
+            'evidence': 'Found class with _instance attribute, typical of Singleton implementation',
+            'benefits': ['Controlled access to sole instance', 'Reduced namespace pollution', 'Permits refinement of operations']
+        })
+    
+    # Factory Pattern
+    if re.search(r'def\s+create_\w+|def\s+make_\w+|class\s+\w*Factory', code, re.IGNORECASE):
+        patterns.append({
+            'name': 'Factory Pattern',
+            'confidence': 'Medium',
+            'description': 'Creates objects without specifying the exact class to create',
+            'evidence': 'Found factory-like method or class names (create_*, make_*, *Factory)',
+            'benefits': ['Decouples object creation', 'Promotes code reusability', 'Makes testing easier']
+        })
+    
+    # Observer Pattern
+    if re.search(r'(notify|update|subscribe|observer|listener)', code, re.IGNORECASE):
+        patterns.append({
+            'name': 'Observer Pattern',
+            'confidence': 'Medium',
+            'description': 'Defines a one-to-many dependency between objects',
+            'evidence': 'Found observer-related keywords (notify, update, subscribe, etc.)',
+            'benefits': ['Loose coupling between subjects and observers', 'Dynamic relationships', 'Support for broadcast communication']
+        })
+    
+    # Strategy Pattern
+    if re.search(r'strategy|algorithm.*interface|def\s+execute', code, re.IGNORECASE):
+        patterns.append({
+            'name': 'Strategy Pattern',
+            'confidence': 'Medium',
+            'description': 'Defines a family of algorithms and makes them interchangeable',
+            'evidence': 'Found strategy-related keywords or algorithm interfaces',
+            'benefits': ['Algorithms can vary independently', 'Eliminates conditional statements', 'Runtime algorithm selection']
+        })
+    
+    # Decorator Pattern
+    if re.search(r'@\w+|decorator|wrapper.*function', code, re.IGNORECASE):
+        patterns.append({
+            'name': 'Decorator Pattern',
+            'confidence': 'High' if '@' in code else 'Medium',
+            'description': 'Adds new functionality to objects dynamically without altering structure',
+            'evidence': 'Found decorators (@) or decorator-related patterns',
+            'benefits': ['Extends functionality without inheritance', 'Flexible and reusable', 'Composition over inheritance']
+        })
+    
+    # Command Pattern
+    if re.search(r'execute.*command|invoke|undo|redo', code, re.IGNORECASE):
+        patterns.append({
+            'name': 'Command Pattern',
+            'confidence': 'Medium',
+            'description': 'Encapsulates a request as an object, allowing parameterization and queuing',
+            'evidence': 'Found command execution, undo/redo, or invoke patterns',
+            'benefits': ['Decouples sender and receiver', 'Supports undo operations', 'Supports logging and queuing']
+        })
+    
+    # Builder Pattern
+    if re.search(r'builder|build\(\)|with_\w+.*return\s+self', code, re.IGNORECASE):
+        patterns.append({
+            'name': 'Builder Pattern',
+            'confidence': 'Medium',
+            'description': 'Constructs complex objects step by step',
+            'evidence': 'Found builder methods or fluent interface patterns',
+            'benefits': ['Controls construction process', 'Allows different representations', 'Isolates complex construction code']
+        })
+    
+    return patterns
+
+
+def detect_anti_patterns(code: str, language: LanguageType) -> List[Dict[str, Any]]:
+    """Detect anti-patterns in the code"""
+    anti_patterns = []
+    
+    # God Object / God Class
+    lines = code.split('\n')
+    class_line_count = 0
+    method_count = 0
+    
+    for line in lines:
+        if re.match(r'\s*def\s+', line):
+            method_count += 1
+        elif re.match(r'\s*class\s+', line):
+            if method_count > 20 or class_line_count > 200:
+                anti_patterns.append({
+                    'name': 'God Object',
+                    'severity': 'High',
+                    'description': 'A class that knows too much or does too much',
+                    'evidence': f'Class with {method_count} methods or {class_line_count} lines',
+                    'impacts': ['Hard to maintain', 'Difficult to test', 'Violates single responsibility'],
+                    'refactoring_suggestions': ['Split into smaller classes', 'Apply Single Responsibility Principle', 'Use composition']
+                })
+            method_count = 0
+            class_line_count = 0
+        class_line_count += 1
+    
+    # Spaghetti Code
+    if re.search(r'goto|continue.*break|break.*continue', code, re.IGNORECASE):
+        anti_patterns.append({
+            'name': 'Spaghetti Code',
+            'severity': 'High',
+            'description': 'Code with a complex and tangled control structure',
+            'evidence': 'Found complex control flow patterns (goto, nested continue/break)',
+            'impacts': ['Hard to follow logic', 'Difficult to debug', 'Error-prone'],
+            'refactoring_suggestions': ['Simplify control flow', 'Extract methods', 'Use early returns']
+        })
+    
+    # Magic Numbers
+    magic_numbers = re.findall(r'\b(?<![\w\.])\d{2,}\b(?![\w\.])', code)
+    if len(magic_numbers) > 3:
+        anti_patterns.append({
+            'name': 'Magic Numbers',
+            'severity': 'Medium',
+            'description': 'Hard-coded numerical values without explanation',
+            'evidence': f'Found {len(magic_numbers)} potential magic numbers: {", ".join(set(magic_numbers[:5]))}',
+            'impacts': ['Reduces code readability', 'Makes maintenance difficult', 'Prone to errors'],
+            'refactoring_suggestions': ['Replace with named constants', 'Use configuration files', 'Add explanatory comments']
+        })
+    
+    # Copy-Paste Programming
+    lines_set = set()
+    duplicate_lines = []
+    for line in lines:
+        stripped = line.strip()
+        if stripped and len(stripped) > 10:
+            if stripped in lines_set:
+                duplicate_lines.append(stripped)
+            lines_set.add(stripped)
+    
+    if len(duplicate_lines) > 5:
+        anti_patterns.append({
+            'name': 'Copy-Paste Programming',
+            'severity': 'Medium',
+            'description': 'Code duplication through copy-paste operations',
+            'evidence': f'Found {len(duplicate_lines)} duplicate lines of code',
+            'impacts': ['Maintenance nightmare', 'Inconsistent changes', 'Bloated codebase'],
+            'refactoring_suggestions': ['Extract common functionality', 'Create reusable functions', 'Use inheritance or composition']
+        })
+    
+    # Shotgun Surgery
+    if code.count('import') > 15 or code.count('from') > 15:
+        anti_patterns.append({
+            'name': 'Shotgun Surgery',
+            'severity': 'Medium',
+            'description': 'Many imports suggest changes require modifications across many classes',
+            'evidence': f'High number of imports ({code.count("import") + code.count("from")})',
+            'impacts': ['Changes affect many files', 'Hard to track dependencies', 'Increased risk of bugs'],
+            'refactoring_suggestions': ['Consolidate related functionality', 'Reduce coupling', 'Use dependency injection']
+        })
+    
+    return anti_patterns
+
+
+def detect_code_smells(code: str, language: LanguageType) -> List[Dict[str, Any]]:
+    """Detect code smells in the code"""
+    smells = []
+    
+    # Long Method
+    methods = re.findall(r'def\s+\w+.*?(?=def|\Z)', code, re.DOTALL)
+    for method in methods:
+        method_lines = len([line for line in method.split('\n') if line.strip()])
+        if method_lines > 30:
+            method_name = re.search(r'def\s+(\w+)', method)
+            name = method_name.group(1) if method_name else 'unknown'
+            smells.append({
+                'name': 'Long Method',
+                'type': 'Bloater',
+                'severity': 'Medium',
+                'description': f'Method "{name}" is too long ({method_lines} lines)',
+                'evidence': f'Method exceeds recommended length of 20-30 lines',
+                'refactoring_suggestions': ['Extract smaller methods', 'Break down complex logic', 'Use composition']
+            })
+    
+    # Long Parameter List
+    param_lists = re.findall(r'def\s+\w+\([^)]*\)', code)
+    for param_list in param_lists:
+        param_count = len([p for p in param_list.split(',') if p.strip() and 'self' not in p])
+        if param_count > 5:
+            smells.append({
+                'name': 'Long Parameter List',
+                'type': 'Bloater',
+                'severity': 'Medium',
+                'description': f'Function has too many parameters ({param_count})',
+                'evidence': f'Parameter count exceeds recommended maximum of 4-5',
+                'refactoring_suggestions': ['Use parameter objects', 'Break into smaller functions', 'Use configuration objects']
+            })
+    
+    # Duplicate Code
+    lines = [line.strip() for line in code.split('\n') if line.strip() and len(line.strip()) > 5]
+    line_counts = {}
+    for line in lines:
+        line_counts[line] = line_counts.get(line, 0) + 1
+    
+    duplicates = {line: count for line, count in line_counts.items() if count > 2}
+    if duplicates:
+        smells.append({
+            'name': 'Duplicate Code',
+            'type': 'Dispensable',
+            'severity': 'High',
+            'description': f'Found {len(duplicates)} duplicated code patterns',
+            'evidence': f'Multiple identical or similar code segments detected',
+            'refactoring_suggestions': ['Extract common code into functions', 'Use inheritance', 'Create utility functions']
+        })
+    
+    # Dead Code
+    if re.search(r'#.*TODO|#.*FIXME|#.*HACK|pass\s*$|return\s*$', code, re.MULTILINE):
+        smells.append({
+            'name': 'Dead Code / TODO Comments',
+            'type': 'Dispensable',
+            'severity': 'Low',
+            'description': 'Found commented code, TODOs, or empty implementations',
+            'evidence': 'TODO comments, FIXME notes, or pass statements detected',
+            'refactoring_suggestions': ['Remove unused code', 'Implement TODOs', 'Clean up comments']
+        })
+    
+    # Large Class
+    class_matches = re.findall(r'class\s+\w+.*?(?=class|\Z)', code, re.DOTALL)
+    for class_match in class_matches:
+        class_lines = len([line for line in class_match.split('\n') if line.strip()])
+        method_count = len(re.findall(r'def\s+\w+', class_match))
+        if class_lines > 100 or method_count > 15:
+            class_name = re.search(r'class\s+(\w+)', class_match)
+            name = class_name.group(1) if class_name else 'unknown'
+            smells.append({
+                'name': 'Large Class',
+                'type': 'Bloater',
+                'severity': 'Medium',
+                'description': f'Class "{name}" is too large ({class_lines} lines, {method_count} methods)',
+                'evidence': f'Class exceeds recommended size limits',
+                'refactoring_suggestions': ['Split into smaller classes', 'Extract responsibilities', 'Use composition']
+            })
+    
+    return smells
+
+
+def detect_architecture_patterns(code: str, language: LanguageType) -> List[Dict[str, Any]]:
+    """Detect architecture patterns in the code"""
+    patterns = []
+    
+    # MVC Pattern
+    if re.search(r'(model|view|controller)', code, re.IGNORECASE):
+        patterns.append({
+            'name': 'Model-View-Controller (MVC)',
+            'type': 'Architectural',
+            'confidence': 'Medium',
+            'description': 'Separates application logic into three interconnected components',
+            'evidence': 'Found model, view, or controller related keywords',
+            'benefits': ['Separation of concerns', 'Parallel development', 'Code reusability']
+        })
+    
+    # Repository Pattern
+    if re.search(r'repository|repo.*class', code, re.IGNORECASE):
+        patterns.append({
+            'name': 'Repository Pattern',
+            'type': 'Data Access',
+            'confidence': 'High',
+            'description': 'Abstracts data access logic and provides a more object-oriented view of the persistence layer',
+            'evidence': 'Found repository classes or interfaces',
+            'benefits': ['Centralized data access logic', 'Easier testing', 'Database agnostic code']
+        })
+    
+    # Service Layer Pattern
+    if re.search(r'service.*class|.*service\.py', code, re.IGNORECASE):
+        patterns.append({
+            'name': 'Service Layer Pattern',
+            'type': 'Architectural',
+            'confidence': 'Medium',
+            'description': 'Defines application boundaries with a layer of services',
+            'evidence': 'Found service classes or service modules',
+            'benefits': ['Clear application boundaries', 'Encapsulates business logic', 'Promotes reusability']
+        })
+    
+    # Dependency Injection
+    if re.search(r'inject|dependency|container|wire', code, re.IGNORECASE):
+        patterns.append({
+            'name': 'Dependency Injection',
+            'type': 'Structural',
+            'confidence': 'Medium',
+            'description': 'Provides dependencies to an object rather than having it create them itself',
+            'evidence': 'Found dependency injection related keywords',
+            'benefits': ['Loose coupling', 'Better testability', 'Flexible configuration']
+        })
+    
+    # Event-Driven Architecture
+    if re.search(r'event|emit|dispatch|publish|subscribe', code, re.IGNORECASE):
+        patterns.append({
+            'name': 'Event-Driven Architecture',
+            'type': 'Architectural',
+            'confidence': 'Medium',
+            'description': 'Uses events to trigger and communicate between services',
+            'evidence': 'Found event handling, publishing, or subscription patterns',
+            'benefits': ['Loose coupling', 'Scalability', 'Flexibility']
+        })
+    
+    # Layered Architecture
+    if re.search(r'layer|tier|presentation|business|data', code, re.IGNORECASE):
+        patterns.append({
+            'name': 'Layered Architecture',
+            'type': 'Architectural',
+            'confidence': 'Low',
+            'description': 'Organizes code into horizontal layers',
+            'evidence': 'Found layer or tier related terminology',
+            'benefits': ['Separation of concerns', 'Maintainability', 'Testability']
+        })
+    
+    return patterns
+
+
+def generate_pattern_recommendations(design_patterns: List[Dict], anti_patterns: List[Dict], code_smells: List[Dict], arch_patterns: List[Dict]) -> List[str]:
+    """Generate recommendations based on detected patterns"""
+    recommendations = []
+    
+    # Recommendations based on anti-patterns
+    if anti_patterns:
+        recommendations.append("**Address Anti-Patterns First**: Focus on eliminating anti-patterns as they actively harm code quality")
+        
+        high_severity_anti_patterns = [ap for ap in anti_patterns if ap['severity'] == 'High']
+        if high_severity_anti_patterns:
+            recommendations.append(f"**High Priority**: {len(high_severity_anti_patterns)} high-severity anti-patterns need immediate attention")
+    
+    # Recommendations based on code smells
+    if code_smells:
+        bloater_smells = [cs for cs in code_smells if cs['type'] == 'Bloater']
+        if bloater_smells:
+            recommendations.append("**Code Size Issues**: Consider breaking down large methods and classes")
+        
+        dispensable_smells = [cs for cs in code_smells if cs['type'] == 'Dispensable']
+        if dispensable_smells:
+            recommendations.append("**Code Cleanup**: Remove dead code and unnecessary duplication")
+    
+    # Recommendations based on design patterns
+    if design_patterns:
+        recommendations.append("**Good Pattern Usage**: Continue leveraging design patterns for maintainable code")
+    else:
+        recommendations.append("**Consider Design Patterns**: Evaluate if design patterns could improve code structure")
+    
+    # Recommendations based on architecture patterns
+    if arch_patterns:
+        recommendations.append("**Architectural Awareness**: Good use of architectural patterns for better organization")
+    else:
+        recommendations.append("**Architecture Consideration**: Consider implementing architectural patterns for better code organization")
+    
+    # General recommendations
+    if not design_patterns and not arch_patterns:
+        recommendations.append("**Pattern Learning**: Study common design and architectural patterns to improve code structure")
+    
+    if anti_patterns or code_smells:
+        recommendations.append("**Refactoring Priority**: Focus on eliminating technical debt before adding new features")
+    
+    return recommendations
+
+
+def get_pattern_guidance(language: LanguageType, pattern_focus: str) -> str:
+    """Get language and focus-specific guidance for pattern detection"""
+    guidance = []
+    
+    if language == LanguageType.PYTHON:
+        guidance.append("### 🐍 Python Pattern Analysis")
+        guidance.append("Python's dynamic nature supports many patterns naturally. Focus on:")
+        guidance.append("- Pythonic patterns (decorators, context managers, generators)")
+        guidance.append("- Duck typing for interface patterns")
+        guidance.append("- Metaclasses for advanced patterns")
+    elif language == LanguageType.JAVASCRIPT:
+        guidance.append("### 🟨 JavaScript Pattern Analysis")
+        guidance.append("JavaScript's prototype-based nature enables unique patterns:")
+        guidance.append("- Module patterns for encapsulation")
+        guidance.append("- Prototype patterns for object creation")
+        guidance.append("- Functional patterns with closures")
+    
+    if pattern_focus == "design_patterns":
+        guidance.append("**Focus**: Design Patterns - Looking for creational, structural, and behavioral patterns")
+    elif pattern_focus == "anti_patterns":
+        guidance.append("**Focus**: Anti-Patterns - Identifying problematic code structures")
+    elif pattern_focus == "code_smells":
+        guidance.append("**Focus**: Code Smells - Detecting signs of deeper problems")
+    elif pattern_focus == "architecture":
+        guidance.append("**Focus**: Architecture Patterns - Analyzing high-level structure")
+    
+    return "\n".join(guidance) + "\n\n" if guidance else ""
 
 
 async def main():
