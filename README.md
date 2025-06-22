@@ -53,17 +53,11 @@ Add to your VS Code settings.json or MCP configuration:
   "mcpServers": {
     "zmcp-shell": {
       "command": "python",
-      "args": ["/path/to/zmcp/src/zshell.py"],
-      "env": {
-        "MCP_API_TOKEN": "your-secret-token"
-      }
+      "args": ["/path/to/zmcp/src/zshell.py"]
     },
     "zmcp-code": {
       "command": "python", 
-      "args": ["/path/to/zmcp/src/zcode.py"],
-      "env": {
-        "MCP_API_TOKEN": "your-secret-token"
-      }
+      "args": ["/path/to/zmcp/src/zcode.py"]
     }
   }
 }
@@ -76,17 +70,11 @@ Create `.vscode/mcp_servers.json` in your workspace:
 {
   "zmcp-shell": {
     "command": "python",
-    "args": ["${workspaceFolder}/path/to/zshell.py"],
-    "env": {
-      "MCP_API_TOKEN": "your-secret-token"
-    }
+    "args": ["${workspaceFolder}/path/to/zshell.py"]
   },
   "zmcp-code": {
     "command": "python",
-    "args": ["${workspaceFolder}/path/to/zcode.py"],
-    "env": {
-      "MCP_API_TOKEN": "your-secret-token"
-    }
+    "args": ["${workspaceFolder}/path/to/zcode.py"]
   }
 }
 ```
@@ -207,10 +195,6 @@ python src/zcode.py
 
 ## Configuration
 
-### Environment Variables
-- `MCP_API_TOKEN`: Authentication token (default: "MYSECRET")
-
-### Server Configuration
 Each server can be configured independently:
 
 **zshell.py**: 
