@@ -312,6 +312,22 @@ async def handle_list_tools() -> List[types.Tool]:
                     "all"
                 )
             }, ["code"])
+        ),
+        types.Tool(
+            name="generate_tests",
+            description="Generate comprehensive unit tests for provided code with edge cases, mocks, and coverage analysis",
+            inputSchema=create_schema({
+                "code": code_property("The code content to generate tests for"),
+                "language": language_property(),
+                "test_type": string_property(
+                    "Type of tests: unit, integration, property_based, mock_heavy, or comprehensive",
+                    "comprehensive"
+                ),
+                "test_framework": string_property(
+                    "Preferred testing framework (e.g., pytest, jest, junit, go_test, or auto)",
+                    "auto"
+                )
+            }, ["code"])
         )
     ]
 
@@ -342,6 +358,8 @@ async def handle_call_tool(
         return await streamline_python_imports(arguments)
     elif name == "detect_code_patterns":
         return await detect_code_patterns(arguments)
+    elif name == "generate_tests":
+        return await generate_tests(arguments)
     else:
         raise ValueError(f"Unknown tool: {name}")
 
@@ -1843,6 +1861,568 @@ def get_pattern_guidance(language: LanguageType, pattern_focus: str) -> str:
         guidance.append("**Focus**: Architecture Patterns - Analyzing high-level structure")
     
     return "\n".join(guidance) + "\n\n" if guidance else ""
+
+
+
+
+
+async def generate_tests(args: Dict[str, Any]) -> List[types.TextContent | types.ImageContent | types.EmbeddedResource]:
+    """Generate comprehensive unit tests for provided code"""
+    code = args.get("code", "").strip()
+    language = args.get("language", "auto-detect")
+    test_type = args.get("test_type", "comprehensive")
+    test_framework = args.get("test_framework", "auto")
+    
+    # Handle elicitation for insufficient input
+    if not code:
+        return [types.TextContent(
+            type="text",
+            text="❓ **Missing Code Input**\n\nTo generate tests, I need:\n- **Code**: The source code to generate tests for\n- **Language** (optional): Programming language (auto-detected if not provided)\n- **Test Type** (optional): unit, integration, property_based, mock_heavy, or comprehensive\n- **Framework** (optional): Testing framework preference\n\nPlease provide the code you'd like me to generate tests for."
+        )]
+    
+    # Detect language if not provided
+    detected_language = detect_language(code, language)
+    
+    # Determine appropriate test framework
+    framework = determine_test_framework(detected_language, test_framework)
+    
+    # Parse and analyze the code
+    code_analysis = analyze_code_for_testing(code, detected_language)
+    
+    # Generate test content based on test type
+    test_content = generate_test_content(code_analysis, detected_language, framework, test_type)
+    
+    # Generate coverage analysis and missing scenarios
+    coverage_analysis = analyze_test_coverage(code_analysis, test_type)
+    
+    # Get testing guidance
+    guidance = get_testing_guidance(detected_language, framework, test_type)
+    
+    result = f"""{guidance}
+
+## 🧪 Generated Tests
+
+{test_content}
+
+## 📊 Coverage Analysis
+
+{coverage_analysis}
+
+## 🎯 Testing Recommendations
+
+{generate_testing_recommendations(code_analysis, detected_language, test_type)}
+"""
+    
+    return [types.TextContent(type="text", text=result)]
+
+
+def determine_test_framework(language: LanguageType, preferred_framework: str) -> str:
+    """Determine the appropriate test framework based on language and preference"""
+    if preferred_framework != "auto":
+        return preferred_framework
+    
+    framework_map = {
+        LanguageType.PYTHON: "pytest",
+        LanguageType.JAVASCRIPT: "jest",
+        LanguageType.TYPESCRIPT: "jest",
+        LanguageType.JAVA: "junit",
+        LanguageType.C: "unity",
+        LanguageType.RUST: "rust_test",
+        LanguageType.GO: "go_test",
+    }
+    
+    return framework_map.get(language, "generic")
+
+
+def analyze_code_for_testing(code: str, language: LanguageType) -> Dict[str, Any]:
+    """Analyze code to extract testable components"""
+    analysis = {
+        "functions": [],
+        "classes": [],
+        "methods": [],
+        "dependencies": [],
+        "complexity": "medium",
+        "edge_cases": [],
+        "error_conditions": [],
+        "async_patterns": False,
+        "io_operations": False,
+        "external_apis": False
+    }
+    
+    # Function detection patterns by language
+    if language == LanguageType.PYTHON:
+        # Find Python functions and classes
+        functions = re.findall(r'def\s+(\w+)\s*\([^)]*\):', code)
+        classes = re.findall(r'class\s+(\w+)(?:\([^)]*\))?:', code)
+        methods = re.findall(r'def\s+(\w+)\s*\(self[^)]*\):', code)
+        
+        analysis["functions"] = functions
+        analysis["classes"] = classes
+        analysis["methods"] = methods
+        analysis["async_patterns"] = "async def" in code or "await " in code
+        analysis["io_operations"] = any(keyword in code for keyword in ["open(", "file", "input(", "print("])
+        analysis["external_apis"] = any(keyword in code for keyword in ["requests.", "urllib", "http"])
+        
+    elif language in [LanguageType.JAVASCRIPT, LanguageType.TYPESCRIPT]:
+        # Find JavaScript/TypeScript functions and classes
+        functions = re.findall(r'function\s+(\w+)\s*\(|const\s+(\w+)\s*=\s*\([^)]*\)\s*=>', code)
+        classes = re.findall(r'class\s+(\w+)', code)
+        methods = re.findall(r'(\w+)\s*\([^)]*\)\s*{', code)
+        
+        analysis["functions"] = [f for f in functions if f]
+        analysis["classes"] = classes
+        analysis["methods"] = methods
+        analysis["async_patterns"] = "async " in code or "await " in code or "Promise" in code
+        analysis["io_operations"] = any(keyword in code for keyword in ["fs.", "readFile", "writeFile", "console."])
+        analysis["external_apis"] = any(keyword in code for keyword in ["fetch(", "axios", "http"])
+    
+    elif language == LanguageType.JAVA:
+        # Find Java methods and classes
+        functions = re.findall(r'public\s+\w+\s+(\w+)\s*\([^)]*\)', code)
+        classes = re.findall(r'class\s+(\w+)', code)
+        
+        analysis["functions"] = functions
+        analysis["classes"] = classes
+        analysis["io_operations"] = any(keyword in code for keyword in ["System.out", "Scanner", "File"])
+        analysis["external_apis"] = any(keyword in code for keyword in ["HttpClient", "URL", "RestTemplate"])
+    
+    # Detect potential edge cases and error conditions
+    analysis["edge_cases"] = detect_edge_cases(code, language)
+    analysis["error_conditions"] = detect_error_conditions(code, language)
+    analysis["dependencies"] = detect_dependencies(code, language)
+    
+    return analysis
+
+
+def detect_edge_cases(code: str, language: LanguageType) -> List[str]:
+    """Detect potential edge cases in the code"""
+    edge_cases = []
+    
+    # Common edge cases across languages
+    if "len(" in code or ".length" in code or ".size" in code:
+        edge_cases.extend(["Empty collections", "Single-item collections", "Large collections"])
+    
+    if any(op in code for op in ["/", "//", "%", "div"]):
+        edge_cases.extend(["Division by zero", "Negative numbers", "Floating point precision"])
+    
+    if "null" in code or "None" in code or "nil" in code:
+        edge_cases.append("Null/None values")
+    
+    if any(keyword in code for keyword in ["int(", "Integer.parseInt", "Number(", "parseFloat"]):
+        edge_cases.extend(["Invalid input formats", "Overflow conditions", "Underflow conditions"])
+    
+    if "[" in code and "]" in code:
+        edge_cases.extend(["Index out of bounds", "Empty arrays/lists"])
+    
+    return edge_cases
+
+
+def detect_error_conditions(code: str, language: LanguageType) -> List[str]:
+    """Detect potential error conditions in the code"""
+    error_conditions = []
+    
+    if language == LanguageType.PYTHON:
+        if "try:" in code or "except" in code:
+            error_conditions.append("Exception handling present")
+        if "raise" in code:
+            error_conditions.append("Custom exceptions")
+    
+    elif language in [LanguageType.JAVASCRIPT, LanguageType.TYPESCRIPT]:
+        if "try {" in code or "catch" in code:
+            error_conditions.append("Error handling present")
+        if "throw" in code:
+            error_conditions.append("Custom errors")
+    
+    elif language == LanguageType.JAVA:
+        if "try {" in code or "catch" in code:
+            error_conditions.append("Exception handling present")
+        if "throw" in code:
+            error_conditions.append("Custom exceptions")
+    
+    # Network/IO related errors
+    if any(keyword in code for keyword in ["http", "url", "request", "file", "socket"]):
+        error_conditions.extend(["Network failures", "IO errors", "Timeout conditions"])
+    
+    return error_conditions
+
+
+def detect_dependencies(code: str, language: LanguageType) -> List[str]:
+    """Detect external dependencies that may need mocking"""
+    dependencies = []
+    
+    if language == LanguageType.PYTHON:
+        imports = re.findall(r'import\s+(\w+)|from\s+(\w+)', code)
+        dependencies.extend([imp for imp in imports if imp])
+    
+    elif language in [LanguageType.JAVASCRIPT, LanguageType.TYPESCRIPT]:
+        imports = re.findall(r'import.*from\s+[\'"]([^\'"]+)[\'"]|require\([\'"]([^\'"]+)[\'"]\)', code)
+        dependencies.extend([imp for imp in imports if imp])
+    
+    # Common external services that typically need mocking
+    if any(keyword in code for keyword in ["database", "db", "sql", "mongo"]):
+        dependencies.append("Database")
+    
+    if any(keyword in code for keyword in ["redis", "cache", "memcache"]):
+        dependencies.append("Cache")
+    
+    if any(keyword in code for keyword in ["api", "http", "request", "fetch"]):
+        dependencies.append("External APIs")
+    
+    return dependencies
+
+
+def generate_test_content(analysis: Dict[str, Any], language: LanguageType, framework: str, test_type: str) -> str:
+    """Generate the actual test code based on analysis"""
+    if language == LanguageType.PYTHON:
+        return generate_python_tests(analysis, framework, test_type)
+    elif language in [LanguageType.JAVASCRIPT, LanguageType.TYPESCRIPT]:
+        return generate_javascript_tests(analysis, framework, test_type)
+    elif language == LanguageType.JAVA:
+        return generate_java_tests(analysis, framework, test_type)
+    elif language == LanguageType.RUST:
+        return generate_rust_tests(analysis, framework, test_type)
+    elif language == LanguageType.GO:
+        return generate_go_tests(analysis, framework, test_type)
+    else:
+        return generate_generic_tests(analysis, language, test_type)
+
+
+def generate_python_tests(analysis: Dict[str, Any], framework: str, test_type: str) -> str:
+    """Generate Python test code"""
+    if framework == "pytest":
+        content = "```python\nimport pytest\nfrom unittest.mock import Mock, patch, MagicMock\n"
+        
+        # Add imports based on detected dependencies
+        if analysis.get("async_patterns"):
+            content += "import asyncio\nfrom pytest_asyncio import pytest\n"
+        
+        if analysis.get("dependencies"):
+            content += "# Mock external dependencies\n"
+            for dep in analysis["dependencies"]:
+                content += f"# Mock {dep}\n"
+        
+        content += "\n# Test fixtures\n"
+        content += "@pytest.fixture\ndef sample_data():\n    return {'key': 'value'}\n\n"
+        
+        # Generate tests for functions
+        for func in analysis["functions"]:
+            content += f"class Test{func.title()}:\n"
+            content += f"    def test_{func}_happy_path(self):\n"
+            content += f"        # Arrange\n        # Act\n        result = {func}()\n        # Assert\n        assert result is not None\n\n"
+            
+            # Add edge case tests
+            for edge_case in analysis["edge_cases"]:
+                test_name = edge_case.lower().replace(" ", "_").replace("/", "_")
+                content += f"    def test_{func}_{test_name}(self):\n"
+                content += f"        # Test {edge_case}\n        pass\n\n"
+            
+            # Add error condition tests
+            for error in analysis["error_conditions"]:
+                test_name = error.lower().replace(" ", "_")
+                content += f"    def test_{func}_{test_name}(self):\n"
+                content += f"        # Test {error}\n        with pytest.raises(Exception):\n            {func}()\n\n"
+        
+        # Generate mock tests if external dependencies detected
+        if analysis["dependencies"]:
+            content += "# Mock tests for external dependencies\n"
+            content += "@patch('requests.get')\ndef test_with_external_api_mock(mock_get):\n"
+            content += "    mock_get.return_value.json.return_value = {'status': 'success'}\n"
+            content += "    # Your test code here\n    pass\n\n"
+        
+        # Property-based testing suggestions
+        if test_type in ["property_based", "comprehensive"]:
+            content += "# Property-based testing with Hypothesis\n"
+            content += "# pip install hypothesis\n"
+            content += "from hypothesis import given, strategies as st\n\n"
+            content += "@given(st.text())\ndef test_property_based_example(s):\n"
+            content += "    # Property: function should handle any string input\n    pass\n\n"
+        
+        content += "```"
+        return content
+    
+    else:  # unittest
+        content = "```python\nimport unittest\nfrom unittest.mock import Mock, patch, MagicMock\n\n"
+        content += "class TestExample(unittest.TestCase):\n"
+        content += "    def setUp(self):\n        pass\n\n"
+        content += "    def tearDown(self):\n        pass\n\n"
+        
+        for func in analysis["functions"]:
+            content += f"    def test_{func}(self):\n"
+            content += f"        result = {func}()\n"
+            content += f"        self.assertIsNotNone(result)\n\n"
+        
+        content += "if __name__ == '__main__':\n    unittest.main()\n```"
+        return content
+
+
+def generate_javascript_tests(analysis: Dict[str, Any], framework: str, test_type: str) -> str:
+    """Generate JavaScript/TypeScript test code"""
+    if framework == "jest":
+        content = "```javascript\n// Jest test file\n"
+        
+        if analysis.get("dependencies"):
+            content += "// Mock external dependencies\n"
+            for dep in analysis["dependencies"]:
+                content += f"jest.mock('{dep}');\n"
+            content += "\n"
+        
+        content += "describe('Test Suite', () => {\n"
+        content += "  beforeEach(() => {\n    // Setup before each test\n  });\n\n"
+        content += "  afterEach(() => {\n    // Cleanup after each test\n    jest.clearAllMocks();\n  });\n\n"
+        
+        for func in analysis["functions"]:
+            content += f"  describe('{func}', () => {{\n"
+            content += f"    it('should work correctly', () => {{\n"
+            content += f"      const result = {func}();\n"
+            content += f"      expect(result).toBeDefined();\n    }});\n\n"
+            
+            # Add async tests if detected
+            if analysis.get("async_patterns"):
+                content += f"    it('should handle async operations', async () => {{\n"
+                content += f"      const result = await {func}();\n"
+                content += f"      expect(result).toBeDefined();\n    }});\n\n"
+            
+            # Add edge case tests
+            for edge_case in analysis["edge_cases"]:
+                test_name = edge_case.lower().replace(" ", "_")
+                content += f"    it('should handle {edge_case.lower()}', () => {{\n"
+                content += f"      // Test {edge_case}\n      expect(() => {func}()).not.toThrow();\n    }});\n\n"
+        
+        content += "  });\n});\n```"
+        return content
+    
+    else:  # Mocha or generic
+        content = "```javascript\n// Mocha test file\nconst { expect } = require('chai');\n\n"
+        content += "describe('Test Suite', function() {\n"
+        
+        for func in analysis["functions"]:
+            content += f"  describe('{func}', function() {{\n"
+            content += f"    it('should work correctly', function() {{\n"
+            content += f"      const result = {func}();\n"
+            content += f"      expect(result).to.exist;\n    }});\n  }});\n"
+        
+        content += "});\n```"
+        return content
+
+
+def generate_java_tests(analysis: Dict[str, Any], framework: str, test_type: str) -> str:
+    """Generate Java test code"""
+    content = "```java\nimport org.junit.jupiter.api.Test;\n"
+    content += "import org.junit.jupiter.api.BeforeEach;\n"
+    content += "import org.junit.jupiter.api.AfterEach;\n"
+    content += "import org.mockito.Mock;\nimport org.mockito.MockitoAnnotations;\n"
+    content += "import static org.junit.jupiter.api.Assertions.*;\n"
+    content += "import static org.mockito.Mockito.*;\n\n"
+    
+    content += "public class ExampleTest {\n\n"
+    
+    if analysis["dependencies"]:
+        for dep in analysis["dependencies"]:
+            content += f"    @Mock\n    private {dep} mock{dep};\n"
+        content += "\n"
+    
+    content += "    @BeforeEach\n    void setUp() {\n"
+    content += "        MockitoAnnotations.openMocks(this);\n    }\n\n"
+    
+    for func in analysis["functions"]:
+        content += f"    @Test\n    void test{func.title()}() {{\n"
+        content += f"        // Arrange\n        // Act\n        // Assert\n"
+        content += f"        assertNotNull(result);\n    }}\n\n"
+    
+    content += "}\n```"
+    return content
+
+
+def generate_rust_tests(analysis: Dict[str, Any], framework: str, test_type: str) -> str:
+    """Generate Rust test code"""
+    content = "```rust\n#[cfg(test)]\nmod tests {\n    use super::*;\n\n"
+    
+    for func in analysis["functions"]:
+        content += f"    #[test]\n    fn test_{func}() {{\n"
+        content += f"        let result = {func}();\n"
+        content += f"        assert!(result.is_ok());\n    }}\n\n"
+        
+        # Add error tests
+        content += f"    #[test]\n    #[should_panic]\n    fn test_{func}_error_case() {{\n"
+        content += f"        // Test error condition\n    }}\n\n"
+    
+    content += "}\n```"
+    return content
+
+
+def generate_go_tests(analysis: Dict[str, Any], framework: str, test_type: str) -> str:
+    """Generate Go test code"""
+    content = "```go\npackage main\n\nimport (\n    \"testing\"\n)\n\n"
+    
+    for func in analysis["functions"]:
+        content += f"func Test{func.title()}(t *testing.T) {{\n"
+        content += f"    result := {func}()\n"
+        content += f"    if result == nil {{\n        t.Error(\"Expected non-nil result\")\n    }}\n}}\n\n"
+        
+        # Add benchmark test
+        content += f"func Benchmark{func.title()}(b *testing.B) {{\n"
+        content += f"    for i := 0; i < b.N; i++ {{\n        {func}()\n    }}\n}}\n\n"
+    
+    content += "```"
+    return content
+
+
+def generate_generic_tests(analysis: Dict[str, Any], language: LanguageType, test_type: str) -> str:
+    """Generate generic test structure for unsupported languages"""
+    content = f"```{language.value}\n// Generic test structure for {language.value}\n\n"
+    content += "// Test Setup\n// - Initialize test data\n// - Setup mocks for dependencies\n\n"
+    
+    for func in analysis["functions"]:
+        content += f"// Test: {func}\n"
+        content += f"// - Happy path test\n"
+        content += f"// - Edge case tests\n"
+        content += f"// - Error condition tests\n\n"
+    
+    content += "// Test Cleanup\n// - Reset mocks\n// - Clean up resources\n```"
+    return content
+
+
+def analyze_test_coverage(analysis: Dict[str, Any], test_type: str) -> str:
+    """Analyze test coverage and suggest missing scenarios"""
+    coverage = []
+    
+    # Function coverage
+    func_count = len(analysis["functions"])
+    if func_count > 0:
+        coverage.append(f"**Functions**: {func_count} functions detected")
+        coverage.append("- ✅ Basic functionality tests")
+        if analysis["edge_cases"]:
+            coverage.append("- ✅ Edge case tests")
+        if analysis["error_conditions"]:
+            coverage.append("- ✅ Error handling tests")
+    
+    # Coverage gaps
+    missing = []
+    if analysis.get("async_patterns") and test_type != "comprehensive":
+        missing.append("- ⚠️ Async/concurrent execution tests")
+    
+    if analysis.get("io_operations"):
+        missing.append("- ⚠️ IO operation error handling")
+    
+    if analysis.get("external_apis"):
+        missing.append("- ⚠️ API failure scenarios")
+    
+    if analysis["dependencies"] and test_type != "mock_heavy":
+        missing.append("- ⚠️ Comprehensive dependency mocking")
+    
+    if missing:
+        coverage.append("\n**Missing Coverage Areas:**")
+        coverage.extend(missing)
+    
+    # Coverage recommendations
+    recommendations = [
+        "\n**Coverage Recommendations:**",
+        "- Aim for >90% line coverage",
+        "- Include integration tests for critical paths",
+        "- Add performance/load tests for bottlenecks",
+        "- Consider mutation testing for test quality"
+    ]
+    
+    if test_type == "comprehensive":
+        recommendations.extend([
+            "- Property-based testing for complex logic",
+            "- Fuzz testing for input validation",
+            "- Contract testing for APIs"
+        ])
+    
+    coverage.extend(recommendations)
+    
+    return "\n".join(coverage)
+
+
+def generate_testing_recommendations(analysis: Dict[str, Any], language: LanguageType, test_type: str) -> str:
+    """Generate specific testing recommendations"""
+    recommendations = []
+    
+    # Language-specific recommendations
+    if language == LanguageType.PYTHON:
+        recommendations.extend([
+            "🐍 **Python Testing Best Practices:**",
+            "- Use `pytest` fixtures for test data setup",
+            "- Leverage `mock.patch` for external dependencies",
+            "- Consider `hypothesis` for property-based testing",
+            "- Use `pytest-cov` for coverage reporting"
+        ])
+    elif language in [LanguageType.JAVASCRIPT, LanguageType.TYPESCRIPT]:
+        recommendations.extend([
+            "🟨 **JavaScript/TypeScript Testing Best Practices:**",
+            "- Use Jest's built-in mocking capabilities",
+            "- Implement async/await testing patterns",
+            "- Consider `@testing-library` for UI components",
+            "- Use `supertest` for API testing"
+        ])
+    elif language == LanguageType.JAVA:
+        recommendations.extend([
+            "☕ **Java Testing Best Practices:**",
+            "- Use Mockito for mocking frameworks",
+            "- Implement parameterized tests with JUnit 5",
+            "- Consider TestContainers for integration tests",
+            "- Use AssertJ for fluent assertions"
+        ])
+    
+    # Test type specific recommendations
+    if test_type == "unit":
+        recommendations.extend([
+            "\n🔧 **Unit Testing Focus:**",
+            "- Test individual functions in isolation",
+            "- Mock all external dependencies",
+            "- Focus on business logic validation"
+        ])
+    elif test_type == "integration":
+        recommendations.extend([
+            "\n🔗 **Integration Testing Focus:**",
+            "- Test component interactions",
+            "- Use real dependencies where possible",
+            "- Validate data flow between layers"
+        ])
+    elif test_type == "property_based":
+        recommendations.extend([
+            "\n🎲 **Property-Based Testing Focus:**",
+            "- Define invariants that should always hold",
+            "- Use random input generation",
+            "- Focus on mathematical properties"
+        ])
+    
+    # Code-specific recommendations
+    if analysis.get("async_patterns"):
+        recommendations.extend([
+            "\n⚡ **Async Testing:**",
+            "- Test race conditions and timing issues",
+            "- Mock time-dependent operations",
+            "- Validate timeout and cancellation handling"
+        ])
+    
+    if analysis.get("external_apis"):
+        recommendations.extend([
+            "\n🌐 **API Testing:**",
+            "- Mock external service responses",
+            "- Test error response handling",
+            "- Validate retry and circuit breaker logic"
+        ])
+    
+    return "\n".join(recommendations)
+
+
+def get_testing_guidance(language: LanguageType, framework: str, test_type: str) -> str:
+    """Get language and framework-specific testing guidance"""
+    guidance = []
+    
+    guidance.append(f"# 🧪 Test Generation for {language.value.title()}")
+    guidance.append(f"**Framework**: {framework} | **Type**: {test_type}")
+    
+    if framework == "pytest":
+        guidance.append("Using pytest - Python's premier testing framework")
+    elif framework == "jest":
+        guidance.append("Using Jest - JavaScript testing framework with built-in mocking")
+    elif framework == "junit":
+        guidance.append("Using JUnit - Java's standard testing framework")
+    
+    return "\n".join(guidance) + "\n"
 
 
 async def main():
