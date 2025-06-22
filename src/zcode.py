@@ -6,6 +6,7 @@ Uses the official MCP library for proper protocol implementation.
 
 import asyncio
 import logging
+from enum import Enum
 from typing import Any, Dict, List
 
 import mcp.types as types
@@ -30,34 +31,52 @@ from python_import_helpers import (
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("code-refactor-mcp")
 
+
+class LanguageType(Enum):
+    """Enumeration of supported programming languages"""
+    PYTHON = "python"
+    JAVASCRIPT = "javascript"
+    TYPESCRIPT = "typescript"
+    C = "c"
+    JAVA = "java"
+    RUST = "rust"
+    GO = "go"
+    UNKNOWN = "unknown"
+
+
 # Create the server instance
 server = Server("code-refactor-mcp")
 
 
-def detect_language(code: str, language_hint: str = "auto-detect") -> str:
+def detect_language(code: str, language_hint: str = "auto-detect") -> LanguageType:
     """Detect programming language from code content"""
     if language_hint != "auto-detect":
-        return language_hint.lower()
+        # Try to match the hint to an enum value
+        hint_lower = language_hint.lower()
+        for lang in LanguageType:
+            if lang.value == hint_lower:
+                return lang
+        return LanguageType.UNKNOWN
     
     # Simple language detection based on common patterns
     code_lower = code.lower()
     
     if "def " in code or "import " in code or "class " in code:
-        return "python"
+        return LanguageType.PYTHON
     elif "function " in code or "const " in code or "let " in code or "var " in code:
-        return "javascript"
+        return LanguageType.JAVASCRIPT
     elif "interface " in code or "type " in code and "=>" in code:
-        return "typescript"
+        return LanguageType.TYPESCRIPT
     elif "#include" in code or "int main" in code:
-        return "c"
+        return LanguageType.C
     elif "public class" in code or "private " in code or "public " in code:
-        return "java"
+        return LanguageType.JAVA
     elif "fn " in code or "let mut" in code:
-        return "rust"
+        return LanguageType.RUST
     elif "func " in code or "package " in code:
-        return "go"
+        return LanguageType.GO
     else:
-        return "unknown"
+        return LanguageType.UNKNOWN
 
 
 @server.list_tools()
@@ -317,19 +336,19 @@ async def refactor_code(args: Dict[str, Any]) -> List[types.TextContent | types.
         suggestions.append("- Avoid abbreviations and single-letter variables (except for short loops)")
     
     # Add language-specific suggestions
-    if language == "python":
+    if language == LanguageType.PYTHON:
         suggestions.append("\n## Python-Specific Refactoring")
         suggestions.append("- Use list comprehensions where appropriate")
         suggestions.append("- Consider using dataclasses for simple data containers")
         suggestions.append("- Use context managers for resource management")
-    elif language == "javascript" or language == "typescript":
+    elif language in [LanguageType.JAVASCRIPT, LanguageType.TYPESCRIPT]:
         suggestions.append("\n## JavaScript/TypeScript-Specific Refactoring")
         suggestions.append("- Use arrow functions for short callbacks")
         suggestions.append("- Consider using destructuring for object property access")
         suggestions.append("- Use async/await instead of Promise chains")
     
-    result_text = f"## Refactoring Analysis for {language.title()} Code\n\n"
-    result_text += f"**Original Code:**\n```{language}\n{code}\n```\n\n"
+    result_text = f"## Refactoring Analysis for {language.value.title()} Code\n\n"
+    result_text += f"**Original Code:**\n```{language.value}\n{code}\n```\n\n"
     result_text += "**Refactoring Suggestions:**\n"
     result_text += "\n".join(suggestions)
     
@@ -350,10 +369,10 @@ async def add_comments(args: Dict[str, Any]) -> List[types.TextContent | types.I
     
     if comment_style == "docstring" or comment_style == "comprehensive":
         suggestions.append("## Function/Method Documentation")
-        if language == "python":
+        if language == LanguageType.PYTHON:
             suggestions.append('- Add docstrings using """triple quotes"""')
             suggestions.append("- Include Args:, Returns:, and Raises: sections")
-        elif language in ["javascript", "typescript"]:
+        elif language in [LanguageType.JAVASCRIPT, LanguageType.TYPESCRIPT]:
             suggestions.append("- Add JSDoc comments with @param, @returns, @throws")
         else:
             suggestions.append("- Add function-level documentation explaining purpose")
@@ -373,22 +392,22 @@ async def add_comments(args: Dict[str, Any]) -> List[types.TextContent | types.I
     
     # Language-specific comment formats
     comment_examples = {
-        "python": "# Single line\n\"\"\"\nMulti-line docstring\n\"\"\"",
-        "javascript": "// Single line\n/* Multi-line\n   comment */\n/** JSDoc comment */",
-        "typescript": "// Single line\n/* Multi-line */\n/** TSDoc comment */",
-        "java": "// Single line\n/* Multi-line */\n/** Javadoc comment */",
-        "c": "// Single line\n/* Multi-line comment */",
-        "rust": "// Single line\n/// Documentation comment\n/* Multi-line */",
-        "go": "// Single line\n/* Multi-line comment */"
+        LanguageType.PYTHON: "# Single line\n\"\"\"\nMulti-line docstring\n\"\"\"",
+        LanguageType.JAVASCRIPT: "// Single line\n/* Multi-line\n   comment */\n/** JSDoc comment */",
+        LanguageType.TYPESCRIPT: "// Single line\n/* Multi-line */\n/** TSDoc comment */",
+        LanguageType.JAVA: "// Single line\n/* Multi-line */\n/** Javadoc comment */",
+        LanguageType.C: "// Single line\n/* Multi-line comment */",
+        LanguageType.RUST: "// Single line\n/// Documentation comment\n/* Multi-line */",
+        LanguageType.GO: "// Single line\n/* Multi-line comment */"
     }
     
-    result_text = f"## Comment Enhancement for {language.title()} Code\n\n"
-    result_text += f"**Original Code:**\n```{language}\n{code}\n```\n\n"
+    result_text = f"## Comment Enhancement for {language.value.title()} Code\n\n"
+    result_text += f"**Original Code:**\n```{language.value}\n{code}\n```\n\n"
     result_text += "**Commenting Guidelines:**\n"
     result_text += "\n".join(suggestions)
     
     if language in comment_examples:
-        result_text += f"\n\n**{language.title()} Comment Syntax:**\n```{language}\n{comment_examples[language]}\n```"
+        result_text += f"\n\n**{language.value.title()} Comment Syntax:**\n```{language.value}\n{comment_examples[language]}\n```"
     
     return [types.TextContent(type="text", text=result_text)]
 
@@ -412,11 +431,11 @@ async def simplify_code(args: Dict[str, Any]) -> List[types.TextContent | types.
     
     if approach == "use_modern_features" or approach == "comprehensive":
         suggestions.append("\n## Use Modern Language Features")
-        if language == "python":
+        if language == LanguageType.PYTHON:
             suggestions.append("- Use f-strings instead of string formatting")
             suggestions.append("- Use walrus operator (:=) where appropriate")
             suggestions.append("- Use match statements for complex conditionals (Python 3.10+)")
-        elif language in ["javascript", "typescript"]:
+        elif language in [LanguageType.JAVASCRIPT, LanguageType.TYPESCRIPT]:
             suggestions.append("- Use template literals instead of string concatenation")
             suggestions.append("- Use optional chaining (?.) and nullish coalescing (??)")
             suggestions.append("- Use array methods like map, filter, reduce")
@@ -434,8 +453,8 @@ async def simplify_code(args: Dict[str, Any]) -> List[types.TextContent | types.
     suggestions.append("- Break down complex expressions into smaller, named parts")
     suggestions.append("- Remove dead code and unused variables")
     
-    result_text = f"## Code Simplification for {language.title()}\n\n"
-    result_text += f"**Original Code:**\n```{language}\n{code}\n```\n\n"
+    result_text = f"## Code Simplification for {language.value.title()}\n\n"
+    result_text += f"**Original Code:**\n```{language.value}\n{code}\n```\n\n"
     result_text += "**Simplification Suggestions:**\n"
     result_text += "\n".join(suggestions)
     
@@ -457,10 +476,10 @@ async def analyze_code(args: Dict[str, Any]) -> List[types.TextContent | types.I
     lines = code.split('\n')
     non_empty_lines = [line for line in lines if line.strip()]
     
-    analysis_results.append(f"## Code Analysis for {language.title()}")
+    analysis_results.append(f"## Code Analysis for {language.value.title()}")
     analysis_results.append(f"- **Total lines:** {len(lines)}")
     analysis_results.append(f"- **Non-empty lines:** {len(non_empty_lines)}")
-    analysis_results.append(f"- **Language detected:** {language}")
+    analysis_results.append(f"- **Language detected:** {language.value}")
     
     if focus == "performance" or focus == "all":
         analysis_results.append("\n## Performance Analysis")
@@ -490,7 +509,7 @@ async def analyze_code(args: Dict[str, Any]) -> List[types.TextContent | types.I
         analysis_results.append("- Use parameterized queries for database operations")
         analysis_results.append("- Sanitize user input to prevent injection attacks")
     
-    result_text = f"**Code to Analyze:**\n```{language}\n{code}\n```\n\n"
+    result_text = f"**Code to Analyze:**\n```{language.value}\n{code}\n```\n\n"
     result_text += "\n".join(analysis_results)
     
     return [types.TextContent(type="text", text=result_text)]
