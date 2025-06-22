@@ -396,17 +396,6 @@ async def go_interface_extractor(args: Dict[str, Any]) -> List[types.TextContent
 ```
 
 ```
-async def rust_trait_generator(args: Dict[str, Any]) -> List[types.TextContent]:
-    """Generate Rust traits and implementations from specifications"""
-    spec = args.get("specification", "")
-    derive_traits = args.get("derive_traits", ["Debug", "Clone"])
-    
-    # Generate trait definitions, default implementations
-    # Suggest appropriate derive traits, async traits
-```
-
-
-```
 async def python_dataclass_generator(args: Dict[str, Any]) -> List[types.TextContent]:
     """Generate Python dataclasses from specifications or existing code"""
     specification = args.get("specification", "")
@@ -448,4 +437,3 @@ async def serialization_analyzer(args: Dict[str, Any]) -> List[types.TextContent
     # Python: json, pickle, dataclasses serialization
     # Go: json tags, custom marshalers
 ```
-    
