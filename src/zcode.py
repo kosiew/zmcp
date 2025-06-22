@@ -50,6 +50,39 @@ class LanguageType(Enum):
 server = Server(MCP_NAME)
 
 
+def _create_schema(properties: Dict[str, Any], required: List[str] | None = None) -> Dict[str, Any]:
+    """Helper function to create input schema with consistent structure"""
+    return {
+        "type": "object",
+        "properties": properties,
+        "required": required or []
+    }
+
+
+def _string_property(description: str, default: str | None = None) -> Dict[str, Any]:
+    """Helper function to create a string property"""
+    prop = {
+        "type": "string",
+        "description": description
+    }
+    if default is not None:
+        prop["default"] = default
+    return prop
+
+
+def _code_property(description: str = "The code content to process") -> Dict[str, Any]:
+    """Helper function to create a code property"""
+    return _string_property(description)
+
+
+def _language_property() -> Dict[str, Any]:
+    """Helper function to create a language property"""
+    return _string_property(
+        "Programming language (e.g., rust, python, javascript, typescript, etc.)",
+        "auto-detect"
+    )
+
+
 def detect_language(code: str, language_hint: str = "auto-detect") -> LanguageType:
     """Detect programming language from code content"""
     if language_hint != "auto-detect":
@@ -88,141 +121,74 @@ async def handle_list_tools() -> List[types.Tool]:
         types.Tool(
             name="get_prompts",
             description="Get useful development prompts for code improvement",
-            inputSchema={
-                "type": "object",
-                "properties": {
-                    "category": {
-                        "type": "string",
-                        "description": "Category of prompts: all, refactoring, commenting, or simplifying",
-                        "default": "all"
-                    }
-                },
-                "required": []
-            }
+            inputSchema=_create_schema({
+                "category": _string_property(
+                    "Category of prompts: all, refactoring, commenting, or simplifying", 
+                    "all"
+                )
+            })
         ),
         types.Tool(
             name="refactor_code",
             description="Analyze code and provide refactoring suggestions",
-            inputSchema={
-                "type": "object",
-                "properties": {
-                    "code": {
-                        "type": "string",
-                        "description": "The code content to refactor"
-                    },
-                    "language": {
-                        "type": "string",
-                        "description": "Programming language (e.g., rust, python, javascript, typescript, etc.)",
-                        "default": "auto-detect"
-                    },
-                    "refactor_type": {
-                        "type": "string",
-                        "description": "Type of refactoring: extract_function, reduce_duplication, simplify_conditionals, improve_naming, or general",
-                        "default": "general"
-                    }
-                },
-                "required": ["code"]
-            }
+            inputSchema=_create_schema({
+                "code": _code_property("The code content to refactor"),
+                "language": _language_property(),
+                "refactor_type": _string_property(
+                    "Type of refactoring: extract_function, reduce_duplication, simplify_conditionals, improve_naming, or general",
+                    "general"
+                )
+            }, ["code"])
         ),
         types.Tool(
             name="add_comments",
             description="Add comprehensive comments and documentation to provided code",
-            inputSchema={
-                "type": "object",
-                "properties": {
-                    "code": {
-                        "type": "string",
-                        "description": "The code content to document"
-                    },
-                    "language": {
-                        "type": "string",
-                        "description": "Programming language (e.g., python, javascript, typescript, etc.)",
-                        "default": "auto-detect"
-                    },
-                    "comment_style": {
-                        "type": "string",
-                        "description": "Style of comments: docstring, inline, jsdoc, or comprehensive",
-                        "default": "comprehensive"
-                    }
-                },
-                "required": ["code"]
-            }
+            inputSchema=_create_schema({
+                "code": _code_property("The code content to document"),
+                "language": _language_property(),
+                "comment_style": _string_property(
+                    "Style of comments: docstring, inline, jsdoc, or comprehensive",
+                    "comprehensive"
+                )
+            }, ["code"])
         ),
         types.Tool(
             name="simplify_code",
             description="Simplify provided code while maintaining functionality",
-            inputSchema={
-                "type": "object",
-                "properties": {
-                    "code": {
-                        "type": "string",
-                        "description": "The code content to simplify"
-                    },
-                    "language": {
-                        "type": "string",
-                        "description": "Programming language (e.g., rust, python, javascript, typescript, etc.)",
-                        "default": "auto-detect"
-                    },
-                    "simplify_approach": {
-                        "type": "string",
-                        "description": "Approach: reduce_nesting, use_modern_features, eliminate_redundancy, or comprehensive",
-                        "default": "comprehensive"
-                    }
-                },
-                "required": ["code"]
-            }
+            inputSchema=_create_schema({
+                "code": _code_property("The code content to simplify"),
+                "language": _language_property(),
+                "simplify_approach": _string_property(
+                    "Approach: reduce_nesting, use_modern_features, eliminate_redundancy, or comprehensive",
+                    "comprehensive"
+                )
+            }, ["code"])
         ),
         types.Tool(
             name="analyze_code",
             description="Analyze provided code and suggest improvements",
-            inputSchema={
-                "type": "object",
-                "properties": {
-                    "code": {
-                        "type": "string",
-                        "description": "The code content to analyze"
-                    },
-                    "language": {
-                        "type": "string",
-                        "description": "Programming language (e.g., rust, python, javascript, typescript, etc.)",
-                        "default": "auto-detect"
-                    },
-                    "analysis_focus": {
-                        "type": "string",
-                        "description": "Focus area: performance, readability, maintainability, security, or all",
-                        "default": "all"
-                    }
-                },
-                "required": ["code"]
-            }
+            inputSchema=_create_schema({
+                "code": _code_property("The code content to analyze"),
+                "language": _language_property(),
+                "analysis_focus": _string_property(
+                    "Focus area: performance, readability, maintainability, security, or all",
+                    "all"
+                )
+            }, ["code"])
         ),
         types.Tool(
             name="streamline_rust_imports",
             description="Streamline Rust import statements by consolidating imports with the same base path",
-            inputSchema={
-                "type": "object",
-                "properties": {
-                    "code": {
-                        "type": "string",
-                        "description": "The Rust code with import statements to streamline"
-                    }
-                },
-                "required": ["code"]
-            }
+            inputSchema=_create_schema({
+                "code": _code_property("The Rust code with import statements to streamline")
+            }, ["code"])
         ),
         types.Tool(
             name="streamline_python_imports",
             description="Streamline Python import statements by consolidating imports from the same module",
-            inputSchema={
-                "type": "object",
-                "properties": {
-                    "code": {
-                        "type": "string",
-                        "description": "The Python code with import statements to streamline"
-                    }
-                },
-                "required": ["code"]
-            }
+            inputSchema=_create_schema({
+                "code": _code_property("The Python code with import statements to streamline")
+            }, ["code"])
         )
     ]
 
