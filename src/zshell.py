@@ -25,6 +25,38 @@ logger = logging.getLogger(MCP_NAME)
 server = Server(MCP_NAME)
 
 
+def _create_schema(properties: Dict[str, Any], required: List[str] | None = None) -> Dict[str, Any]:
+    """Helper function to create input schema with consistent structure"""
+    return {
+        "type": "object",
+        "properties": properties,
+        "required": required or []
+    }
+
+
+def _string_property(description: str, default: str | None = None) -> Dict[str, Any]:
+    """Helper function to create a string property"""
+    prop = {
+        "type": "string",
+        "description": description
+    }
+    if default is not None:
+        prop["default"] = default
+    return prop
+
+
+def _array_property(description: str, item_type: str = "string", default: List[Any] | None = None) -> Dict[str, Any]:
+    """Helper function to create an array property"""
+    prop = {
+        "type": "array",
+        "items": {"type": item_type},
+        "description": description
+    }
+    if default is not None:
+        prop["default"] = default
+    return prop
+
+
 class CommandWhitelist:
     """Manages allowed commands for security"""
     
@@ -112,36 +144,19 @@ async def handle_list_tools() -> List[types.Tool]:
         types.Tool(
             name="execute_command",
             description="Execute a whitelisted shell command safely",
-            inputSchema={
-                "type": "object",
-                "properties": {
-                    "command": {
-                        "type": "string",
-                        "description": "The command to execute"
-                    },
-                    "args": {
-                        "type": "array",
-                        "items": {"type": "string"},
-                        "description": "Command arguments",
-                        "default": []
-                    },
-                    "working_directory": {
-                        "type": "string",
-                        "description": "Working directory for command execution",
-                        "default": "."
-                    }
-                },
-                "required": ["command"]
-            }
+            inputSchema=_create_schema({
+                "command": _string_property("The command to execute"),
+                "args": _array_property("Command arguments", default=[]),
+                "working_directory": _string_property(
+                    "Working directory for command execution", 
+                    "."
+                )
+            }, ["command"]),
         ),
         types.Tool(
             name="get_joke",
             description="Get a simple joke for testing",
-            inputSchema={
-                "type": "object",
-                "properties": {},
-                "required": []
-            }
+            inputSchema=_create_schema({}),
         ),
 
     ]
