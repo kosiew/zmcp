@@ -14,6 +14,8 @@ from mcp.server import NotificationOptions, Server
 from mcp.server.models import InitializationOptions
 import mcp.server.stdio
 
+from tool_helpers import create_schema, string_property, code_property, language_property
+
 # Import Rust helpers for streamlining imports
 from rust_import_helpers import (
     parse_import_statements, 
@@ -48,39 +50,6 @@ class LanguageType(Enum):
 
 # Create the server instance
 server = Server(MCP_NAME)
-
-
-def _create_schema(properties: Dict[str, Any], required: List[str] | None = None) -> Dict[str, Any]:
-    """Helper function to create input schema with consistent structure"""
-    return {
-        "type": "object",
-        "properties": properties,
-        "required": required or []
-    }
-
-
-def _string_property(description: str, default: str | None = None) -> Dict[str, Any]:
-    """Helper function to create a string property"""
-    prop = {
-        "type": "string",
-        "description": description
-    }
-    if default is not None:
-        prop["default"] = default
-    return prop
-
-
-def _code_property(description: str = "The code content to process") -> Dict[str, Any]:
-    """Helper function to create a code property"""
-    return _string_property(description)
-
-
-def _language_property() -> Dict[str, Any]:
-    """Helper function to create a language property"""
-    return _string_property(
-        "Programming language (e.g., rust, python, javascript, typescript, etc.)",
-        "auto-detect"
-    )
 
 
 def detect_language(code: str, language_hint: str = "auto-detect") -> LanguageType:
@@ -121,8 +90,8 @@ async def handle_list_tools() -> List[types.Tool]:
         types.Tool(
             name="get_prompts",
             description="Get useful development prompts for code improvement",
-            inputSchema=_create_schema({
-                "category": _string_property(
+            inputSchema=create_schema({
+                "category": string_property(
                     "Category of prompts: all, refactoring, commenting, or simplifying", 
                     "all"
                 )
@@ -131,10 +100,10 @@ async def handle_list_tools() -> List[types.Tool]:
         types.Tool(
             name="refactor_code",
             description="Analyze code and provide refactoring suggestions",
-            inputSchema=_create_schema({
-                "code": _code_property("The code content to refactor"),
-                "language": _language_property(),
-                "refactor_type": _string_property(
+            inputSchema=create_schema({
+                "code": code_property("The code content to refactor"),
+                "language": language_property(),
+                "refactor_type": string_property(
                     "Type of refactoring: extract_function, reduce_duplication, simplify_conditionals, improve_naming, or general",
                     "general"
                 )
@@ -143,10 +112,10 @@ async def handle_list_tools() -> List[types.Tool]:
         types.Tool(
             name="add_comments",
             description="Add comprehensive comments and documentation to provided code",
-            inputSchema=_create_schema({
-                "code": _code_property("The code content to document"),
-                "language": _language_property(),
-                "comment_style": _string_property(
+            inputSchema=create_schema({
+                "code": code_property("The code content to document"),
+                "language": language_property(),
+                "comment_style": string_property(
                     "Style of comments: docstring, inline, jsdoc, or comprehensive",
                     "comprehensive"
                 )
@@ -155,10 +124,10 @@ async def handle_list_tools() -> List[types.Tool]:
         types.Tool(
             name="simplify_code",
             description="Simplify provided code while maintaining functionality",
-            inputSchema=_create_schema({
-                "code": _code_property("The code content to simplify"),
-                "language": _language_property(),
-                "simplify_approach": _string_property(
+            inputSchema=create_schema({
+                "code": code_property("The code content to simplify"),
+                "language": language_property(),
+                "simplify_approach": string_property(
                     "Approach: reduce_nesting, use_modern_features, eliminate_redundancy, or comprehensive",
                     "comprehensive"
                 )
@@ -167,10 +136,10 @@ async def handle_list_tools() -> List[types.Tool]:
         types.Tool(
             name="analyze_code",
             description="Analyze provided code and suggest improvements",
-            inputSchema=_create_schema({
-                "code": _code_property("The code content to analyze"),
-                "language": _language_property(),
-                "analysis_focus": _string_property(
+            inputSchema=create_schema({
+                "code": code_property("The code content to analyze"),
+                "language": language_property(),
+                "analysis_focus": string_property(
                     "Focus area: performance, readability, maintainability, security, or all",
                     "all"
                 )
@@ -179,15 +148,15 @@ async def handle_list_tools() -> List[types.Tool]:
         types.Tool(
             name="streamline_rust_imports",
             description="Streamline Rust import statements by consolidating imports with the same base path",
-            inputSchema=_create_schema({
-                "code": _code_property("The Rust code with import statements to streamline")
+            inputSchema=create_schema({
+                "code": code_property("The Rust code with import statements to streamline")
             }, ["code"])
         ),
         types.Tool(
             name="streamline_python_imports",
             description="Streamline Python import statements by consolidating imports from the same module",
-            inputSchema=_create_schema({
-                "code": _code_property("The Python code with import statements to streamline")
+            inputSchema=create_schema({
+                "code": code_property("The Python code with import statements to streamline")
             }, ["code"])
         )
     ]
