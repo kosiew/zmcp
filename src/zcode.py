@@ -227,6 +227,18 @@ async def handle_list_tools() -> List[types.Tool]:
             })
         ),
         types.Tool(
+            name="get_code_metrics",
+            description="Calculate detailed code quality metrics including cyclomatic complexity, maintainability index, and technical debt assessment",
+            inputSchema=create_schema({
+                "code": code_property("The code content to analyze for quality metrics"),
+                "language": language_property(),
+                "metrics_focus": string_property(
+                    "Focus area: complexity, maintainability, halstead, solid_principles, or all",
+                    "all"
+                )
+            }, ["code"])
+        ),
+        types.Tool(
             name="refactor_code",
             description="Analyze code and provide refactoring suggestions",
             inputSchema=create_schema({
@@ -301,6 +313,8 @@ async def handle_call_tool(
     
     if name == "get_prompts":
         return await get_prompts(arguments)
+    elif name == "get_code_metrics":
+        return await get_code_metrics(arguments)
     elif name == "refactor_code":
         return await refactor_code(arguments)
     elif name == "add_comments":
@@ -742,6 +756,429 @@ def get_language_guidance(detected_language: LanguageType, code: str) -> str:
         return guidance
     
     return ""
+
+
+async def get_code_metrics(args: Dict[str, Any]) -> List[types.TextContent | types.ImageContent | types.EmbeddedResource]:
+    """Calculate detailed code quality metrics"""
+    code = args.get("code", "")
+    language = detect_language(code, args.get("language", "auto-detect"))
+    metrics_focus = args.get("metrics_focus", "all")
+    
+    # Validate input and provide elicitation if needed
+    is_valid, validation_message = validate_code_input(code, min_lines=5)
+    if not is_valid:
+        suggestions = [
+            "Source code for quality analysis (at least 5+ lines for meaningful metrics)",
+            "Complete functions or classes work best for accurate complexity measurements",
+            "Specify the programming language if auto-detection might be unclear",
+            "Choose metrics focus: 'complexity' for cyclomatic complexity, 'maintainability' for maintainability index, 'halstead' for Halstead metrics, 'solid_principles' for SOLID adherence, or 'all' for comprehensive analysis",
+            "Include actual production code rather than simple examples for realistic metrics"
+        ]
+        elicitation_text = create_elicitation_message("get_code_metrics", validation_message, suggestions)
+        return [types.TextContent(type="text", text=elicitation_text)]
+    
+    # Get basic complexity analysis
+    complexity = detect_code_complexity(code)
+    
+    # Calculate advanced metrics
+    metrics_results = []
+    
+    # Enhanced cyclomatic complexity calculation
+    cyclomatic_complexity = calculate_cyclomatic_complexity(code)
+    
+    # Halstead metrics calculation
+    halstead_metrics = calculate_halstead_metrics(code, language)
+    
+    # Maintainability index calculation
+    maintainability_index = calculate_maintainability_index(code, cyclomatic_complexity, halstead_metrics)
+    
+    # Technical debt assessment
+    technical_debt = assess_technical_debt(code, complexity, language)
+    
+    # SOLID principles adherence (where applicable)
+    solid_assessment = assess_solid_principles(code, language, complexity)
+    
+    metrics_results.append(f"## Comprehensive Code Quality Metrics for {language.value.title()}")
+    metrics_results.append(f"**Code Size:** {len(code.split())} words, {complexity['non_empty_lines']} non-empty lines")
+    
+    if metrics_focus == "complexity" or metrics_focus == "all":
+        metrics_results.append("\n### 📊 Cyclomatic Complexity Analysis")
+        metrics_results.append(f"- **Cyclomatic Complexity:** {cyclomatic_complexity['total']} (McCabe)")
+        metrics_results.append(f"- **Average per Function:** {cyclomatic_complexity['average']:.1f}")
+        metrics_results.append(f"- **Maximum Function Complexity:** {cyclomatic_complexity['max']}")
+        metrics_results.append(f"- **Risk Assessment:** {get_complexity_risk_level(cyclomatic_complexity['max'])}")
+        
+        # Complexity interpretation
+        if cyclomatic_complexity['max'] <= 10:
+            metrics_results.append("- ✅ **Good**: Low complexity, easy to test and maintain")
+        elif cyclomatic_complexity['max'] <= 20:
+            metrics_results.append("- ⚠️ **Moderate**: Consider refactoring complex functions")
+        else:
+            metrics_results.append("- 🚨 **High**: Significant refactoring recommended")
+    
+    if metrics_focus == "halstead" or metrics_focus == "all":
+        metrics_results.append("\n### 🔢 Halstead Complexity Metrics")
+        metrics_results.append(f"- **Program Length (N):** {halstead_metrics['length']}")
+        metrics_results.append(f"- **Vocabulary Size (n):** {halstead_metrics['vocabulary']}")
+        metrics_results.append(f"- **Estimated Length (N̂):** {halstead_metrics['estimated_length']:.1f}")
+        metrics_results.append(f"- **Volume (V):** {halstead_metrics['volume']:.1f}")
+        metrics_results.append(f"- **Difficulty (D):** {halstead_metrics['difficulty']:.1f}")
+        metrics_results.append(f"- **Effort (E):** {halstead_metrics['effort']:.1f}")
+        metrics_results.append(f"- **Programming Time:** {halstead_metrics['time']:.1f} seconds")
+        metrics_results.append(f"- **Estimated Bugs:** {halstead_metrics['bugs']:.2f}")
+    
+    if metrics_focus == "maintainability" or metrics_focus == "all":
+        metrics_results.append("\n### 🔧 Maintainability Assessment")
+        metrics_results.append(f"- **Maintainability Index:** {maintainability_index:.1f}/100")
+        
+        if maintainability_index >= 85:
+            metrics_results.append("- ✅ **Excellent**: Highly maintainable code")
+        elif maintainability_index >= 70:
+            metrics_results.append("- ✅ **Good**: Generally maintainable with minor issues")
+        elif maintainability_index >= 50:
+            metrics_results.append("- ⚠️ **Moderate**: Maintainability concerns present")
+        else:
+            metrics_results.append("- 🚨 **Poor**: Significant maintainability issues")
+        
+        # Technical debt assessment
+        metrics_results.append(f"\n### 💳 Technical Debt Assessment")
+        for debt_item in technical_debt:
+            metrics_results.append(f"- {debt_item}")
+    
+    if metrics_focus == "solid_principles" or metrics_focus == "all":
+        if complexity['class_count'] > 0 or complexity['function_count'] > 0:
+            metrics_results.append("\n### 🏗️ SOLID Principles Adherence")
+            for principle, assessment in solid_assessment.items():
+                metrics_results.append(f"- **{principle}:** {assessment}")
+        else:
+            metrics_results.append("\n### 🏗️ SOLID Principles Assessment")
+            metrics_results.append("- No classes or functions detected - SOLID principles primarily apply to object-oriented code")
+    
+    # Overall code quality score
+    overall_score = calculate_overall_quality_score(cyclomatic_complexity, maintainability_index, halstead_metrics)
+    metrics_results.append(f"\n### 🎯 Overall Quality Score: {overall_score:.1f}/100")
+    
+    if overall_score >= 80:
+        metrics_results.append("**Assessment:** High-quality code with good practices")
+    elif overall_score >= 60:
+        metrics_results.append("**Assessment:** Good code quality with room for improvement")
+    elif overall_score >= 40:
+        metrics_results.append("**Assessment:** Moderate quality, consider refactoring")
+    else:
+        metrics_results.append("**Assessment:** Significant quality issues requiring attention")
+    
+    # Specific recommendations based on metrics
+    metrics_results.append("\n### 💡 Improvement Recommendations")
+    recommendations = generate_metrics_recommendations(cyclomatic_complexity, maintainability_index, halstead_metrics, technical_debt)
+    for rec in recommendations:
+        metrics_results.append(f"- {rec}")
+    
+    result_text = f"**Code Under Analysis:**\n```{language.value}\n{code}\n```\n\n"
+    
+    # Add language guidance if needed
+    language_guide = get_language_guidance(language, code)
+    if language_guide:
+        result_text += language_guide
+    
+    result_text += "\n".join(metrics_results)
+    
+    return [types.TextContent(type="text", text=result_text)]
+
+
+def calculate_cyclomatic_complexity(code: str) -> Dict[str, Any]:
+    """Calculate McCabe cyclomatic complexity"""
+    lines = code.split('\n')
+    total_complexity = 1  # Base complexity
+    function_complexities = []
+    current_function_complexity = 1
+    in_function = False
+    
+    # Decision points that increase complexity
+    decision_keywords = ['if', 'elif', 'else', 'for', 'while', 'case', 'catch', 'except', 'and', 'or', '&&', '||', '?']
+    
+    for line in lines:
+        line_stripped = line.strip().lower()
+        
+        # Detect function start
+        if any(func_start in line_stripped for func_start in ['def ', 'function ', 'fn ', 'func ']):
+            if in_function:
+                function_complexities.append(current_function_complexity)
+            current_function_complexity = 1
+            in_function = True
+        
+        # Count decision points
+        for keyword in decision_keywords:
+            if keyword in line_stripped:
+                current_function_complexity += 1
+                total_complexity += 1
+    
+    # Add the last function if we were in one
+    if in_function:
+        function_complexities.append(current_function_complexity)
+    
+    return {
+        'total': total_complexity,
+        'average': sum(function_complexities) / len(function_complexities) if function_complexities else total_complexity,
+        'max': max(function_complexities) if function_complexities else total_complexity,
+        'functions': function_complexities
+    }
+
+
+def calculate_halstead_metrics(code: str, language: LanguageType) -> Dict[str, float]:
+    """Calculate Halstead complexity metrics"""
+    # Define operators and operands based on language
+    operators = set()
+    operands = set()
+    
+    # Language-specific keywords and operators
+    if language == LanguageType.PYTHON:
+        python_operators = {'+', '-', '*', '/', '//', '%', '**', '=', '==', '!=', '<', '>', '<=', '>=', 
+                          'and', 'or', 'not', 'in', 'is', 'if', 'elif', 'else', 'for', 'while', 'def', 
+                          'class', 'return', 'import', 'from', 'as', 'try', 'except', 'finally', 'with'}
+        operators.update(python_operators)
+    elif language in [LanguageType.JAVASCRIPT, LanguageType.TYPESCRIPT]:
+        js_operators = {'+', '-', '*', '/', '%', '=', '==', '===', '!=', '!==', '<', '>', '<=', '>=',
+                       '&&', '||', '!', 'if', 'else', 'for', 'while', 'function', 'return', 'var', 
+                       'let', 'const', 'try', 'catch', 'finally', 'throw', 'new', 'typeof'}
+        operators.update(js_operators)
+    else:
+        # Generic operators
+        generic_operators = {'+', '-', '*', '/', '%', '=', '==', '!=', '<', '>', '<=', '>=', 
+                           'if', 'else', 'for', 'while', 'return', 'function', 'def'}
+        operators.update(generic_operators)
+    
+    # Simple tokenization (this is a basic implementation)
+    import re
+    tokens = re.findall(r'\b\w+\b|[^\w\s]', code)
+    
+    operator_count = 0
+    operand_count = 0
+    unique_operators = set()
+    unique_operands = set()
+    
+    for token in tokens:
+        if token in operators or not token.isalnum():
+            operator_count += 1
+            unique_operators.add(token)
+        elif token.isalnum():
+            operand_count += 1
+            unique_operands.add(token)
+    
+    # Halstead metrics calculations
+    n1 = len(unique_operators)  # Number of distinct operators
+    n2 = len(unique_operands)   # Number of distinct operands
+    N1 = operator_count         # Total number of operators
+    N2 = operand_count         # Total number of operands
+    
+    # Avoid division by zero
+    n = n1 + n2  # Vocabulary
+    N = N1 + N2  # Length
+    
+    if n1 == 0 or n2 == 0 or n == 0:
+        return {
+            'length': N, 'vocabulary': n, 'estimated_length': 0, 'volume': 0,
+            'difficulty': 0, 'effort': 0, 'time': 0, 'bugs': 0
+        }
+    
+    import math
+    estimated_length = n1 * math.log2(n1) + n2 * math.log2(n2)
+    volume = N * math.log2(n) if n > 0 else 0
+    difficulty = (n1 / 2) * (N2 / n2) if n2 > 0 else 0
+    effort = difficulty * volume
+    time = effort / 18  # Seconds (Stroud number)
+    bugs = volume / 3000  # Estimated bugs
+    
+    return {
+        'length': N,
+        'vocabulary': n,
+        'estimated_length': estimated_length,
+        'volume': volume,
+        'difficulty': difficulty,
+        'effort': effort,
+        'time': time,
+        'bugs': bugs
+    }
+
+
+def calculate_maintainability_index(code: str, cyclomatic_complexity: Dict[str, Any], halstead_metrics: Dict[str, float]) -> float:
+    """Calculate maintainability index (0-100 scale)"""
+    lines_of_code = len([line for line in code.split('\n') if line.strip()])
+    
+    # Avoid invalid values
+    volume = max(halstead_metrics['volume'], 1)
+    complexity = max(cyclomatic_complexity['average'], 1)
+    loc = max(lines_of_code, 1)
+    
+    import math
+    
+    # Microsoft's maintainability index formula (modified for 0-100 scale)
+    try:
+        mi = 171 - 5.2 * math.log(volume) - 0.23 * complexity - 16.2 * math.log(loc)
+        # Normalize to 0-100 scale
+        mi = max(0, min(100, mi))
+    except (ValueError, OverflowError):
+        mi = 50  # Default middle value if calculation fails
+    
+    return mi
+
+
+def assess_technical_debt(code: str, complexity: Dict[str, Any], language: LanguageType) -> List[str]:
+    """Assess technical debt indicators"""
+    debt_indicators = []
+    
+    lines = code.split('\n')
+    non_empty_lines = [line for line in lines if line.strip()]
+    
+    # Long methods/functions
+    if complexity['non_empty_lines'] > 50:
+        debt_indicators.append("🚨 **Long Code Block**: Consider breaking into smaller functions")
+    
+    # High complexity
+    if complexity['max_nesting_level'] > 4:
+        debt_indicators.append("🚨 **Deep Nesting**: Refactor to reduce complexity")
+    
+    # Magic numbers (simple detection)
+    magic_numbers = 0
+    for line in non_empty_lines:
+        import re
+        numbers = re.findall(r'\b\d+\b', line)
+        magic_numbers += len([n for n in numbers if n not in ['0', '1']])
+    
+    if magic_numbers > 3:
+        debt_indicators.append("⚠️ **Magic Numbers**: Replace with named constants")
+    
+    # Code duplication (basic detection)
+    line_frequency = {}
+    for line in non_empty_lines:
+        clean_line = line.strip()
+        if len(clean_line) > 10:  # Ignore very short lines
+            line_frequency[clean_line] = line_frequency.get(clean_line, 0) + 1
+    
+    duplicated_lines = sum(1 for count in line_frequency.values() if count > 1)
+    if duplicated_lines > 3:
+        debt_indicators.append("⚠️ **Code Duplication**: Extract common functionality")
+    
+    # Missing error handling (basic detection)
+    has_error_handling = any(keyword in code.lower() for keyword in ['try', 'catch', 'except', 'error', 'throw'])
+    if not has_error_handling and complexity['non_empty_lines'] > 20:
+        debt_indicators.append("⚠️ **Missing Error Handling**: Add exception handling")
+    
+    # Large parameter lists (basic detection)
+    import re
+    function_params = re.findall(r'\([^)]*\)', code)
+    for params in function_params:
+        param_count = len([p for p in params.split(',') if p.strip()])
+        if param_count > 4:
+            debt_indicators.append("⚠️ **Long Parameter Lists**: Consider parameter objects")
+            break
+    
+    if not debt_indicators:
+        debt_indicators.append("✅ **Low Technical Debt**: No major debt indicators detected")
+    
+    return debt_indicators
+
+
+def assess_solid_principles(code: str, language: LanguageType, complexity: Dict[str, Any]) -> Dict[str, str]:
+    """Assess adherence to SOLID principles"""
+    assessment = {}
+    
+    # Single Responsibility Principle
+    if complexity['class_count'] > 0:
+        if complexity['non_empty_lines'] / max(complexity['class_count'], 1) > 50:
+            assessment["Single Responsibility"] = "⚠️ Large classes detected - may violate SRP"
+        else:
+            assessment["Single Responsibility"] = "✅ Class sizes appear reasonable"
+    else:
+        assessment["Single Responsibility"] = "ℹ️ No classes detected - assess function responsibilities"
+    
+    # Open/Closed Principle
+    has_inheritance = any(keyword in code.lower() for keyword in ['extends', 'inherits', 'class.*:', 'interface'])
+    if has_inheritance:
+        assessment["Open/Closed"] = "✅ Inheritance/interfaces detected - good for extensibility"
+    else:
+        assessment["Open/Closed"] = "ℹ️ Limited inheritance patterns - consider for future extensions"
+    
+    # Liskov Substitution Principle
+    if complexity['class_count'] > 1:
+        assessment["Liskov Substitution"] = "ℹ️ Multiple classes - ensure substitutability in inheritance"
+    else:
+        assessment["Liskov Substitution"] = "ℹ️ Limited class hierarchy - LSP not immediately applicable"
+    
+    # Interface Segregation Principle
+    has_interfaces = 'interface' in code.lower() or 'abstract' in code.lower()
+    if has_interfaces:
+        assessment["Interface Segregation"] = "✅ Interfaces/abstractions detected"
+    else:
+        assessment["Interface Segregation"] = "ℹ️ Consider using interfaces for better decoupling"
+    
+    # Dependency Inversion Principle
+    has_dependency_injection = any(pattern in code.lower() for pattern in ['inject', 'dependency', 'container'])
+    if has_dependency_injection:
+        assessment["Dependency Inversion"] = "✅ Dependency injection patterns detected"
+    else:
+        assessment["Dependency Inversion"] = "ℹ️ Consider dependency injection for better testability"
+    
+    return assessment
+
+
+def get_complexity_risk_level(complexity: int) -> str:
+    """Get risk level based on cyclomatic complexity"""
+    if complexity <= 10:
+        return "Low Risk"
+    elif complexity <= 20:
+        return "Moderate Risk"
+    elif complexity <= 50:
+        return "High Risk"
+    else:
+        return "Very High Risk"
+
+
+def calculate_overall_quality_score(cyclomatic_complexity: Dict[str, Any], maintainability_index: float, halstead_metrics: Dict[str, float]) -> float:
+    """Calculate overall code quality score"""
+    # Complexity score (inverse relationship)
+    complexity_score = max(0, 100 - (cyclomatic_complexity['max'] * 5))
+    
+    # Maintainability score
+    maintainability_score = maintainability_index
+    
+    # Halstead score (based on estimated bugs)
+    halstead_score = max(0, 100 - (halstead_metrics['bugs'] * 50))
+    
+    # Weighted average
+    overall_score = (complexity_score * 0.4 + maintainability_score * 0.4 + halstead_score * 0.2)
+    
+    return min(100, max(0, overall_score))
+
+
+def generate_metrics_recommendations(cyclomatic_complexity: Dict[str, Any], maintainability_index: float, halstead_metrics: Dict[str, float], technical_debt: List[str]) -> List[str]:
+    """Generate specific recommendations based on metrics"""
+    recommendations = []
+    
+    # Complexity recommendations
+    if cyclomatic_complexity['max'] > 10:
+        recommendations.append("**Reduce Cyclomatic Complexity**: Break down complex functions into smaller, focused functions")
+    
+    # Maintainability recommendations
+    if maintainability_index < 70:
+        recommendations.append("**Improve Maintainability**: Add documentation, reduce complexity, and improve naming")
+    
+    # Halstead recommendations
+    if halstead_metrics['bugs'] > 0.5:
+        recommendations.append("**Address Potential Bugs**: Review complex logic and add comprehensive testing")
+    
+    # Volume recommendations
+    if halstead_metrics['volume'] > 1000:
+        recommendations.append("**Reduce Code Volume**: Consider extracting functionality into separate modules")
+    
+    # Technical debt recommendations
+    debt_count = len([debt for debt in technical_debt if '🚨' in debt or '⚠️' in debt])
+    if debt_count > 2:
+        recommendations.append("**Address Technical Debt**: Prioritize fixing identified debt indicators")
+    
+    if not recommendations:
+        recommendations.append("**Good Code Quality**: Continue following current practices and consider regular code reviews")
+    
+    return recommendations
 
 
 # Add this function to help with tool results formatting
